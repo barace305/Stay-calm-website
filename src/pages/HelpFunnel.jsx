@@ -54,7 +54,7 @@ export default function HelpFunnel() {
             <img
               src="/logo.png"
               alt="Stay Calm"
-              className="h-20 sm:h-28 w-auto object-contain drop-shadow-lg"
+              className="h-[200px] sm:h-[350px] w-auto object-contain drop-shadow-lg -my-16 sm:-my-32"
             />
           </a>
         </div>
@@ -189,7 +189,7 @@ export default function HelpFunnel() {
       {/* Simple Footer */}
       <footer className="bg-navy-950 border-t border-navy-800/50 py-10">
         <div className="max-w-4xl mx-auto px-6 text-center">
-          <img src="/logo.png" alt="Stay Calm" className="h-16 w-auto object-contain mx-auto mb-6 opacity-80" />
+          <img src="/logo.png" alt="Stay Calm" className="h-[200px] sm:h-[300px] w-auto object-contain mx-auto mb-6 -my-16 sm:-my-24" />
           <p className="text-navy-400 text-sm mb-4">
             Connecting people with trusted professionals in the South.
           </p>
