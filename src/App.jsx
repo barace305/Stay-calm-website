@@ -1,23 +1,14 @@
-import Header from './components/Header'
-import Hero from './components/Hero'
-import HowItWorks from './components/HowItWorks'
-import ContactForm from './components/ContactForm'
-import ServiceAreas from './components/ServiceAreas'
-import About from './components/About'
-import Footer from './components/Footer'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Home from './pages/Home';
+import HelpFunnel from './pages/HelpFunnel';
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-navy-950 text-white font-sans antialiased">
-      <Header />
-      <main>
-        <Hero />
-        <ContactForm />
-        <HowItWorks />
-        <ServiceAreas />
-        <About />
-      </main>
-      <Footer />
-    </div>
-  )
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/help" element={<HelpFunnel />} />
+      </Routes>
+    </Router>
+  );
 }
