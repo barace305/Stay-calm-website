@@ -42,7 +42,7 @@ export default function Footer() {
                 <img
                   src="/logo.png"
                   alt="Stay Calm"
-                  className="h-24 sm:h-28 w-auto object-contain"
+                  className="h-[200px] sm:h-[300px] w-auto object-contain -my-16 sm:-my-24 -ml-4"
                 />
               </div>
               <p className="text-navy-400 text-sm leading-relaxed mb-4">

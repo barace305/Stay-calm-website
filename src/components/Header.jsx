@@ -32,7 +32,7 @@ export default function Header() {
           <img
             src="/logo.png"
             alt="Stay Calm"
-            className="h-24 sm:h-32 w-auto object-contain drop-shadow-lg"
+            className="h-[200px] sm:h-[350px] w-auto object-contain drop-shadow-lg -my-16 sm:-my-32 -ml-2"
           />
         </a>
 
