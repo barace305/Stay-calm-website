@@ -26,7 +26,12 @@ export default function HelpFunnel() {
     e.preventDefault();
     console.log('Funnel Form Submitted:', form);
     setSubmitted(true);
-    // In a real app, send data to backend here.
+    // Google Ads conversion tracking — fires only on real form submit
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', 'conversion', {
+        'send_to': 'AW-770750070/qPRlCNms778BEPbswu8C'
+      });
+    }
   };
 
   const inputClasses =
