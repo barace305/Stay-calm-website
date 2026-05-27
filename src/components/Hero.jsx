@@ -57,10 +57,14 @@ export default function Hero() {
             </svg>
           </a>
           <a
-            href="#how-it-works"
-            className="px-8 py-4 border border-navy-600 text-navy-200 font-medium text-lg rounded-xl hover:border-gold-500/50 hover:text-gold-400 transition-all duration-300"
+            href="tel:4049901344"
+            id="hero-call-now"
+            className="px-8 py-4 border border-gold-500/40 text-gold-400 font-semibold text-lg rounded-xl hover:bg-gold-500/10 hover:border-gold-400 transition-all duration-300 flex items-center gap-2"
           >
-            Learn More
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            Call Now
           </a>
         </div>
 

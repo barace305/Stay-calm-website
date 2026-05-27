@@ -73,7 +73,7 @@ export default function ContactForm() {
             </div>
             <div>
               <label htmlFor="city" className={labelClasses}>City / State *</label>
-              <input id="city" name="city" type="text" required placeholder="Atlanta, GA" value={form.city} onChange={handleChange} className={inputClasses} />
+              <input id="city" name="city" type="text" required placeholder="" value={form.city} onChange={handleChange} className={inputClasses} />
             </div>
             <div>
               <label htmlFor="accidentDate" className={labelClasses}>Date of Accident</label>

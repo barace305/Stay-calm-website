@@ -9,15 +9,27 @@ export default function Footer() {
         <p className="text-navy-300 text-lg mb-8 max-w-xl mx-auto">
           Our team is ready to connect you with the right professional. No cost, no obligation.
         </p>
-        <a
-          href="#contact"
-          className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950 font-semibold text-lg rounded-xl hover:from-gold-400 hover:to-gold-500 transition-all duration-300 shadow-lg shadow-gold-500/20 hover:shadow-gold-500/40 hover:-translate-y-0.5"
-        >
-          Get Help Today
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-          </svg>
-        </a>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <a
+            href="#contact"
+            className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950 font-semibold text-lg rounded-xl hover:from-gold-400 hover:to-gold-500 transition-all duration-300 shadow-lg shadow-gold-500/20 hover:shadow-gold-500/40 hover:-translate-y-0.5"
+          >
+            Get Help Today
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+            </svg>
+          </a>
+          <a
+            href="tel:4049901344"
+            id="footer-call-now"
+            className="inline-flex items-center gap-2 px-8 py-4 border border-gold-500/40 text-gold-400 font-semibold text-lg rounded-xl hover:bg-gold-500/10 hover:border-gold-400 transition-all duration-300"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            Call (404) 990-1344
+          </a>
+        </div>
       </div>
 
       {/* Footer bottom */}
@@ -26,13 +38,12 @@ export default function Footer() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
             {/* Brand */}
             <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
-                  <span className="font-serif text-navy-950 font-bold text-base leading-none">SC</span>
-                </div>
-                <span className="font-serif text-xl font-semibold text-white">
-                  Stay <span className="text-gold-400">Calm</span>
-                </span>
+              <div className="flex items-center gap-2 mb-4">
+                <img
+                  src="/logo.png"
+                  alt="Stay Calm"
+                  className="h-10 w-auto object-contain"
+                />
               </div>
               <p className="text-navy-400 text-sm leading-relaxed mb-4">
                 The fastest growing referral network in the South. Connecting people with trusted professionals.
@@ -68,6 +79,12 @@ export default function Footer() {
             <div>
               <h4 className="text-white font-semibold mb-4 text-sm tracking-wider uppercase">Contact</h4>
               <ul className="space-y-3 text-navy-400 text-sm">
+                <li className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-gold-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  <a href="tel:4049901344" className="hover:text-gold-400 transition-colors">(404) 990-1344</a>
+                </li>
                 <li className="flex items-center gap-2">
                   <svg className="w-4 h-4 text-gold-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
