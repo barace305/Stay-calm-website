@@ -11,6 +11,8 @@ export default function HelpFunnel() {
   });
   const [submitted, setSubmitted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -22,15 +24,49 @@ export default function HelpFunnel() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitting(true);
+    setError(null);
     console.log('Funnel Form Submitted:', form);
-    setSubmitted(true);
-    // Google Ads conversion tracking — fires only on real form submit
-    if (typeof window.gtag === 'function') {
-      window.gtag('event', 'conversion', {
-        'send_to': 'AW-770750070/qPRlCNms778BEPbswu8C'
+
+    const accessKey = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY || '5366651c-0377-45ec-98e8-bbc97fcbd9a3';
+
+    try {
+      const response = await fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          access_key: accessKey,
+          subject: `New Lead from Stay Calm (/help Funnel): ${form.name}`,
+          from_name: 'Stay Calm Website',
+          page_submitted: '/help Funnel Form',
+          submitted_at: new Date().toLocaleString(),
+          ...form
+        })
       });
+
+      const data = await response.json();
+      if (data.success) {
+        setSubmitted(true);
+        // Google Ads conversion tracking — fires only on successful form submit
+        if (typeof window.gtag === 'function') {
+          window.gtag('event', 'conversion', {
+            'send_to': 'AW-770750070/qPRlCNms778BEPbswu8C'
+          });
+        }
+      } else {
+        console.error('Form submission failed:', data.message);
+        setError(data.message || 'Something went wrong. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error submitting form:', err);
+      setError('Network error. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -175,11 +211,17 @@ export default function HelpFunnel() {
                     <textarea id="description" name="description" rows={4} value={form.description} onChange={handleChange} className={`${inputClasses} resize-none`} placeholder="What happened?" />
                   </div>
                   
+                  {error && (
+                    <p className="text-center text-red-500 text-sm font-semibold mb-4">
+                      {error}
+                    </p>
+                  )}
                   <button
                     type="submit"
-                    className="w-full py-4 bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950 font-bold text-lg rounded-xl hover:from-gold-400 hover:to-gold-500 transition-all duration-300 shadow-lg shadow-gold-500/20 hover:shadow-gold-500/40 mt-4"
+                    disabled={submitting}
+                    className="w-full py-4 bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950 font-bold text-lg rounded-xl hover:from-gold-400 hover:to-gold-500 transition-all duration-300 shadow-lg shadow-gold-500/20 hover:shadow-gold-500/40 mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Get Help Today
+                    {submitting ? 'Submitting...' : 'Get Help Today'}
                   </button>
                   <p className="text-center text-navy-400 text-sm mt-4">
                     Your information is secure and confidential.

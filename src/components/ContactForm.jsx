@@ -6,14 +6,50 @@ export default function ContactForm() {
     injured: '', contactTime: '', description: '',
   })
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(null)
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    setSubmitted(true)
+    setSubmitting(true)
+    setError(null)
+
+    const accessKey = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY || '5366651c-0377-45ec-98e8-bbc97fcbd9a3'
+
+    try {
+      const response = await fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          access_key: accessKey,
+          subject: `New Lead from Stay Calm (Home Contact): ${form.name}`,
+          from_name: 'Stay Calm Website',
+          page_submitted: 'Home Page Contact Form',
+          submitted_at: new Date().toLocaleString(),
+          ...form
+        })
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        setSubmitted(true)
+      } else {
+        console.error('Form submission failed:', data.message)
+        setError(data.message || 'Something went wrong. Please try again.')
+      }
+    } catch (err) {
+      console.error('Error submitting form:', err)
+      setError('Network error. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (submitted) {
@@ -103,12 +139,18 @@ export default function ContactForm() {
               <textarea id="description" name="description" rows={4} placeholder="Briefly describe what happened..." value={form.description} onChange={handleChange} className={`${inputClasses} resize-none`} />
             </div>
           </div>
+          {error && (
+            <p className="mt-4 text-center text-red-500 text-sm font-semibold">
+              {error}
+            </p>
+          )}
           <button
             id="submit-form"
             type="submit"
-            className="mt-8 w-full py-4 bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950 font-bold text-lg rounded-xl hover:from-gold-400 hover:to-gold-500 transition-all duration-300 shadow-lg shadow-gold-500/20 hover:shadow-gold-500/40 hover:-translate-y-0.5 cursor-pointer"
+            disabled={submitting}
+            className="mt-8 w-full py-4 bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950 font-bold text-lg rounded-xl hover:from-gold-400 hover:to-gold-500 transition-all duration-300 shadow-lg shadow-gold-500/20 hover:shadow-gold-500/40 hover:-translate-y-0.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Submit — Get Help Today
+            {submitting ? 'Submitting...' : 'Submit — Get Help Today'}
           </button>
           <p className="mt-4 text-center text-navy-500 text-xs">
             Your information is private and secure. We'll never share your data.
