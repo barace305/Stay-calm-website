@@ -110,7 +110,7 @@ export default function BodyShop() {
               Need Vehicle <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold-400 to-gold-600">Repair Assistance?</span>
             </h1>
             <p className="text-navy-200 text-lg sm:text-xl max-w-2xl mx-auto mb-8 leading-relaxed">
-              Trusted repair resources, fast responses, and support available 24/7.
+              Find Top-Rated Independent Collision And Vehicle Repair Experts Instantly.
             </p>
             
             {/* Header Call-Now Buttons */}

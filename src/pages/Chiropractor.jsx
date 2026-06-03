@@ -109,7 +109,7 @@ export default function Chiropractor() {
               Need <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold-400 to-gold-600">Chiropractic Assistance?</span>
             </h1>
             <p className="text-navy-200 text-lg sm:text-xl max-w-2xl mx-auto mb-8 leading-relaxed">
-              Fast responses, trusted recovery resources, and support available 24/7.
+              Expert Pain Relief, Certified Physical Recovery, And Personalized Care.
             </p>
             
             {/* Header Call-Now Buttons */}
