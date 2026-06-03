@@ -14,6 +14,7 @@ export default function App() {
         <Route path="/chiropractor" element={<Chiropractor />} />
         <Route path="/towing" element={<Towing />} />
         <Route path="/body-shop" element={<BodyShop />} />
+        <Route path="/bodyshop" element={<BodyShop />} />
       </Routes>
     </Router>
   );

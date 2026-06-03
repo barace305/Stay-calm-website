@@ -115,8 +115,8 @@ export default function HelpFunnel() {
             <h2 className="text-2xl sm:text-3xl text-gold-400 font-semibold mb-6">
               Stay Calm. We're Here To Help.
             </h2>
-            <p className="text-navy-200 text-lg sm:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
-              We help connect people with attorneys, medical providers, vehicle assistance, and recovery resources.
+            <p className="text-navy-100 text-xl sm:text-2xl max-w-3xl mx-auto mb-10 leading-relaxed font-medium">
+              Free Consultation. 24/7 Fast Response. Get Connected With The Help You Need Today.
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
