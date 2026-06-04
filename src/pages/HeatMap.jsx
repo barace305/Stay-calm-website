@@ -3,8 +3,8 @@ import {
   generateDemoIncidents,
   getActiveIncidents,
   getSeverityIntensity,
+  getAgeDecay,
   formatRelativeTime,
-  formatClockTime,
 } from '../data/heatmapData';
 import '../styles/heatmap.css';
 
@@ -32,24 +32,92 @@ const MAP_CENTER = [33.8490, -84.3000];
 const MAP_ZOOM = 10;
 
 // ─── HEAT LAYER CONFIG ──────────────────────────────────────────────────────
+// Tuned for big cloud-like zones that merge when incidents cluster together
 const HEAT_OPTIONS = {
-  radius: 35,
-  blur: 25,
-  maxZoom: 15,
+  radius: 50,
+  blur: 35,
+  maxZoom: 14,
   max: 1.0,
+  minOpacity: 0.25,
   gradient: {
-    0.0: 'rgba(0,0,0,0)',
-    0.15: '#D4AF3730',
-    0.3: '#D4AF37',
-    0.5: '#F59E0B',
-    0.65: '#F97316',
-    0.8: '#DC2626',
-    1.0: '#991B1B',
+    0.0:  'rgba(0, 0, 0, 0)',
+    0.10: '#D4AF3715',
+    0.20: '#D4AF3750',
+    0.30: '#D4AF37',
+    0.45: '#F59E0B',
+    0.55: '#F97316',
+    0.70: '#EF4444',
+    0.85: '#DC2626',
+    1.0:  '#991B1B',
   },
 };
 
 // ─── REFRESH INTERVAL (ms) ──────────────────────────────────────────────────
 const REFRESH_INTERVAL = 60000; // Re-filter incidents every 60 seconds
+
+// ─── CLOUD SPREAD CONFIG ────────────────────────────────────────────────────
+// Each incident generates additional heat points around it to create
+// cloud-like zones instead of hard dots. Higher severity = more spread.
+const SPREAD_CONFIG = {
+  High:   { count: 8, radius: 0.012 },   // ~0.8 mile cloud
+  Medium: { count: 5, radius: 0.009 },   // ~0.6 mile cloud
+  Low:    { count: 3, radius: 0.006 },   // ~0.4 mile cloud
+};
+
+// ─── SEEDED RANDOM ──────────────────────────────────────────────────────────
+// Deterministic pseudo-random so cloud shapes don't jitter on re-render
+function seededRandom(seed) {
+  let x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+// ─── GENERATE CLOUD HEAT POINTS ─────────────────────────────────────────────
+// Takes active incidents and generates a dense array of [lat, lng, intensity]
+// with spread sub-points around each incident to create cloud-like heat zones.
+function generateCloudHeatPoints(activeIncidents) {
+  const points = [];
+
+  activeIncidents.forEach((inc, idx) => {
+    const baseIntensity = getSeverityIntensity(inc.severity);
+    const ageMultiplier = getAgeDecay(inc.createdAt);
+    const intensity = baseIntensity * ageMultiplier;
+
+    // Center point — full intensity
+    points.push([inc.latitude, inc.longitude, intensity]);
+
+    // Spread points — create the cloud
+    const spread = SPREAD_CONFIG[inc.severity] || SPREAD_CONFIG.Medium;
+    for (let i = 0; i < spread.count; i++) {
+      const seed = idx * 100 + i;
+      const angle = (2 * Math.PI * i) / spread.count + seededRandom(seed) * 0.5;
+      const dist = spread.radius * (0.35 + seededRandom(seed + 50) * 0.65);
+      const subIntensity = intensity * (0.25 + seededRandom(seed + 99) * 0.35);
+
+      points.push([
+        inc.latitude + dist * Math.cos(angle),
+        inc.longitude + dist * Math.sin(angle),
+        subIntensity,
+      ]);
+    }
+
+    // Extra inner ring for High severity — makes the core glow denser
+    if (inc.severity === 'High') {
+      for (let j = 0; j < 4; j++) {
+        const seed2 = idx * 200 + j;
+        const angle2 = (2 * Math.PI * j) / 4 + seededRandom(seed2 + 150) * 0.3;
+        const dist2 = spread.radius * 0.25 * (0.5 + seededRandom(seed2 + 200) * 0.5);
+        points.push([
+          inc.latitude + dist2 * Math.cos(angle2),
+          inc.longitude + dist2 * Math.sin(angle2),
+          intensity * 0.8,
+        ]);
+      }
+    }
+  });
+
+  return points;
+}
+
 
 export default function HeatMap() {
   const [authenticated, setAuthenticated] = useState(
@@ -190,7 +258,6 @@ function MapDashboard({ onLogout }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const heatLayerRef = useRef(null);
-  const [incidents, setIncidents] = useState([]);
   const [activeIncidents, setActiveIncidents] = useState([]);
   const [panelOpen, setPanelOpen] = useState(true);
   const [showPwaBanner, setShowPwaBanner] = useState(true);
@@ -198,7 +265,6 @@ function MapDashboard({ onLogout }) {
   // ─── Load & refresh incident data ─────────────────────────────────────
   const refreshIncidents = useCallback(() => {
     const allIncidents = generateDemoIncidents();
-    setIncidents(allIncidents);
     const active = getActiveIncidents(allIncidents);
     setActiveIncidents(active);
     return active;
@@ -268,14 +334,10 @@ function MapDashboard({ onLogout }) {
       map.removeLayer(heatLayerRef.current);
     }
 
-    // Build heat data: [lat, lng, intensity]
-    const heatData = activeList.map((inc) => [
-      inc.latitude,
-      inc.longitude,
-      getSeverityIntensity(inc.severity),
-    ]);
+    // Generate cloud-style heat data with spread sub-points
+    const heatData = generateCloudHeatPoints(activeList);
 
-    // Create new heat layer
+    // Create new heat layer with cloud config
     const heat = L.heatLayer(heatData, HEAT_OPTIONS).addTo(map);
     heatLayerRef.current = heat;
   }
