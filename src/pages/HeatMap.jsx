@@ -146,7 +146,7 @@ function MapDashboard({ onLogout }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const layerGroupRef = useRef(null);
-  const panelRef = useRef(null);
+  const headerRef = useRef(null);
   
   const [activeIncidents, setActiveIncidents] = useState([]);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -261,14 +261,28 @@ function MapDashboard({ onLogout }) {
     });
   }, []);
 
-  // Prevent Leaflet map from stealing click/scroll/drag events from the bottom sheet
+  // Native touch event handler on mobile panel header to bypass React 17+ event delegation blocks
   useEffect(() => {
-    const L = window.L;
-    if (L && panelRef.current) {
-      L.DomEvent.disableClickPropagation(panelRef.current);
-      L.DomEvent.disableScrollPropagation(panelRef.current);
-    }
-  });
+    const headerEl = headerRef.current;
+    if (!headerEl) return;
+
+    const handleHeaderTap = (e) => {
+      // Toggle state directly on mobile click/tap
+      if (window.innerWidth <= 640) {
+        e.preventDefault();
+        e.stopPropagation();
+        setMobileExpanded((prev) => !prev);
+      }
+    };
+
+    headerEl.addEventListener('click', handleHeaderTap);
+    headerEl.addEventListener('touchstart', handleHeaderTap, { passive: false });
+
+    return () => {
+      headerEl.removeEventListener('click', handleHeaderTap);
+      headerEl.removeEventListener('touchstart', handleHeaderTap);
+    };
+  }, [isMobile]);
 
   // Initialize Map
   useEffect(() => {
@@ -338,13 +352,6 @@ function MapDashboard({ onLogout }) {
     return () => clearInterval(interval);
   }, [refreshIncidents, updateHeatLayer]);
 
-  const handleMobileHeaderClick = (e) => {
-    if (isMobile) {
-      e.stopPropagation();
-      setMobileExpanded(!mobileExpanded);
-    }
-  };
-
   const getIncidentIconPath = (type) => {
     switch (type) {
       case 'Multi-Vehicle Collision':
@@ -410,14 +417,14 @@ function MapDashboard({ onLogout }) {
         </button>
 
         {/* Sidebar / Mobile Bottom Sheet */}
-        <div ref={panelRef} className={panelClass}>
+        <div className={panelClass}>
           {/* Mobile swipe/drag handle */}
-          <div className="mobile-drag-handle" onClick={handleMobileHeaderClick} />
+          <div className="mobile-drag-handle" />
 
           {/* Panel Header */}
           <div 
+            ref={headerRef}
             className="px-4 pt-1.5 pb-2.5 flex items-center justify-between border-b border-[#1E3660]/20 cursor-pointer sm:cursor-default select-none"
-            onClick={handleMobileHeaderClick}
           >
             <div className="flex items-center gap-2">
               <h2 className="text-white font-bold text-[10px] tracking-[0.1em] uppercase">
@@ -430,8 +437,8 @@ function MapDashboard({ onLogout }) {
             <div className="flex items-center gap-2">
               <span className="text-[#5C7EB5] text-[9px] uppercase tracking-wider">90m range</span>
               <button 
-                onClick={handleMobileHeaderClick} 
                 className="text-[#5C7EB5] hover:text-white transition-colors p-1"
+                style={{ pointerEvents: 'none' }} // Let touch events bubble straight to headerRef
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={mobileExpanded ? "M19 15l-7-7-7 7" : "M19 9l-7 7-7-7"} className="sm:hidden" />
