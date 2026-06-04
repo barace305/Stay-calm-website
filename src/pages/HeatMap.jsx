@@ -7,22 +7,26 @@ import {
   formatRelativeTime,
   formatClockTime,
 } from '../data/heatmapData';
+import {
+  adminDb,
+  registerPendingPartner,
+  createPasswordResetRequest,
+  generateDeviceFingerprint,
+  validateDeviceSecurity
+} from '../data/adminData';
 import '../styles/heatmap.css';
 
 /**
  * Stay Calm — Futuristic Live Heat Map (Partner Demo Tool)
  *
  * Private page at /heatmap with:
- * 1. Login gate (demo: tone1234 / tone1234)
- * 2. Full-screen map with premium light map tiles (Voyager)
- * 3. Stable geographic neon radar target rings
- * 4. Collapsible mobile bottom sheet (always visible at bottom)
+ * 1. Login/Sign-up/Forgot Password gate (demo: tone1234 / tone1234)
+ * 2. Device Fingerprint Logic (prevents account sharing, alerts system)
+ * 3. Full-screen map with premium light map tiles (Voyager)
+ * 4. Stable geographic neon radar target rings
+ * 5. Collapsible mobile bottom sheet (always visible at bottom)
  */
 
-const DEMO_USERNAME = 'tone1234';
-const DEMO_PASSWORD = 'tone1234';
-
-// Centered on Midtown/Downtown Connector area
 const MAP_CENTER = [33.785, -84.385];
 const MAP_ZOOM = 12;
 const MAP_MIN_ZOOM = 10;
@@ -43,17 +47,14 @@ export default function HeatMap() {
   useEffect(() => {
     if (!authenticated) return;
 
-    // Reset scroll offset immediately to fix iOS keyboard offset bug
     window.scrollTo(0, 0);
 
-    // Save original styles
     const origOverflow = document.documentElement.style.overflow;
     const origBodyOverflow = document.body.style.overflow;
     const origBodyPos = document.body.style.position;
     const origBodyWidth = document.body.style.width;
     const origBodyHeight = document.body.style.height;
 
-    // Apply strict screen locking
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
     document.body.style.position = 'fixed';
@@ -75,7 +76,7 @@ export default function HeatMap() {
       setAuthenticated(false);
     }} />
   ) : (
-    <LoginScreen onAuth={() => {
+    <GateScreen onAuth={() => {
       sessionStorage.setItem('sc_heatmap_auth', 'true');
       setAuthenticated(true);
     }} />
@@ -83,64 +84,295 @@ export default function HeatMap() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LOGIN SCREEN
+// AUTH / REGISTRATION / RESET GATE SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
-function LoginScreen({ onAuth }) {
+function GateScreen({ onAuth }) {
+  const [screen, setScreen] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  // Registration Form States
+  const [regFullName, setRegFullName] = useState('');
+  const [regCompany, setRegCompany] = useState('');
+  const [regPartnerType, setRegPartnerType] = useState('Tow Company');
+  const [regPhone, setRegPhone] = useState('');
+  const [regNotificationPhone, setRegNotificationPhone] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regTerritory, setRegTerritory] = useState('');
+  const [regUsername, setRegUsername] = useState('');
+
+  // Forgot Password States
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotPhone, setForgotPhone] = useState('');
+
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccessMessage('');
 
     await new Promise((r) => setTimeout(r, 600));
 
-    if (username === DEMO_USERNAME && password === DEMO_PASSWORD) {
-      onAuth();
+    // Verify credentials match in the global partners list
+    const dbPartners = adminDb.getPartners();
+    const match = dbPartners.find(
+      (p) => p.username === username && p.password === password
+    );
+
+    if (match) {
+      if (match.status === 'Pending Approval') {
+        setError('Your account registration is still pending approval by administrators.');
+        setLoading(false);
+        return;
+      }
+      if (match.status === 'Suspended' || match.status === 'Declined') {
+        setError('Access denied. Your account is currently suspended.');
+        setLoading(false);
+        return;
+      }
+
+      // Perform Device Fingerprint Security check
+      const currentFingerprint = generateDeviceFingerprint();
+      const securityCheck = validateDeviceSecurity(username, currentFingerprint, navigator.userAgent);
+
+      if (securityCheck.allowed) {
+        onAuth();
+      } else {
+        setError(securityCheck.reason);
+        setLoading(false);
+      }
     } else {
-      setError('Invalid credentials. Please try again.');
+      setError('Invalid username or password. Please try again.');
       setLoading(false);
     }
   };
 
+  const handleSignupSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    await new Promise((r) => setTimeout(r, 600));
+
+    try {
+      registerPendingPartner({
+        fullName: regFullName,
+        companyName: regCompany,
+        partnerType: regPartnerType,
+        phone: regPhone,
+        notificationPhone: regNotificationPhone,
+        email: regEmail,
+        territory: regTerritory,
+        username: regUsername,
+        password: '' // Assigned on approval
+      });
+
+      setSuccessMessage(
+        'Your account request has been submitted. Stay Calm will review and approve authorized partners only.'
+      );
+      setScreen('login');
+      // Reset signup fields
+      setRegFullName('');
+      setRegCompany('');
+      setRegPhone('');
+      setRegNotificationPhone('');
+      setRegEmail('');
+      setRegTerritory('');
+      setRegUsername('');
+    } catch (err) {
+      setError(err.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    await new Promise((r) => setTimeout(r, 600));
+
+    createPasswordResetRequest({
+      usernameOrEmail: forgotEmail,
+      phone: forgotPhone
+    });
+
+    setSuccessMessage(
+      'Password reset request submitted. A Stay Calm administrator will review your request.'
+    );
+    setScreen('login');
+    setForgotEmail('');
+    setForgotPhone('');
+    setLoading(false);
+  };
+
   return (
-    <div className="heatmap-login-bg min-h-screen flex items-center justify-center px-6 font-sans antialiased">
-      <div className="heatmap-login-card w-full max-w-sm rounded-2xl p-8 animate-fade-in">
-        <div className="flex justify-center mb-8">
-          <img src="/logo.png" alt="Stay Calm" className="h-[160px] w-auto object-contain drop-shadow-lg -my-10" />
+    <div className="heatmap-login-bg min-h-screen flex items-center justify-center px-6 font-sans antialiased py-10">
+      <div className="heatmap-login-card w-full max-w-md rounded-2xl p-8 animate-fade-in">
+        <div className="flex justify-center mb-6">
+          <img src="/logo.png" alt="Stay Calm" className="h-[140px] w-auto object-contain drop-shadow-lg -my-8" />
         </div>
-        <h1 className="text-center text-white font-bold text-lg tracking-wide mb-1">PARTNER ACCESS</h1>
-        <p className="text-center text-[#8AA3CC] text-sm mb-8">Sign in to view the live heat map</p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-[#8AA3CC] mb-1.5 uppercase tracking-wider">Username</label>
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required autoComplete="username"
-              className="heatmap-input w-full px-4 py-3 bg-[#0A1628] border border-[#1E3660] rounded-lg text-white placeholder-[#5C7EB5] focus:outline-none focus:border-[#D4AF37] transition-colors text-sm"
-              placeholder="Enter username" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-[#8AA3CC] mb-1.5 uppercase tracking-wider">Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password"
-              className="heatmap-input w-full px-4 py-3 bg-[#0A1628] border border-[#1E3660] rounded-lg text-white placeholder-[#5C7EB5] focus:outline-none focus:border-[#D4AF37] transition-colors text-sm"
-              placeholder="Enter password" />
-          </div>
-          {error && <p className="text-center text-red-400 text-sm font-medium animate-fade-in">{error}</p>}
-          <button type="submit" disabled={loading}
-            className="w-full py-3.5 bg-gradient-to-r from-[#D4AF37] to-[#B8891E] text-[#060D18] font-bold text-sm rounded-lg hover:from-[#EFC94B] hover:to-[#D4AF37] transition-all duration-300 shadow-lg shadow-[#D4AF37]/10 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider">
-            {loading ? 'Authenticating...' : 'Access Dashboard'}
-          </button>
-        </form>
-        <p className="text-center text-[#5C7EB5] text-xs mt-8">© {new Date().getFullYear()} StayCalm.Today — Partner Portal</p>
+
+        {/* SCREEN TITLE */}
+        {screen === 'login' && (
+          <>
+            <h1 className="text-center text-white font-bold text-lg tracking-wide mb-1">PARTNER ACCESS</h1>
+            <p className="text-center text-[#8AA3CC] text-sm mb-6">Sign in to view the live heat map</p>
+          </>
+        )}
+        {screen === 'signup' && (
+          <>
+            <h1 className="text-center text-white font-bold text-lg tracking-wide mb-1">PARTNER SIGN UP</h1>
+            <p className="text-center text-[#8AA3CC] text-sm mb-6">Apply to join Stay Calm partner network</p>
+          </>
+        )}
+        {screen === 'forgot' && (
+          <>
+            <h1 className="text-center text-white font-bold text-lg tracking-wide mb-1">RECOVER PASSWORD</h1>
+            <p className="text-center text-[#8AA3CC] text-sm mb-6">Submit credential verification request</p>
+          </>
+        )}
+
+        {/* FEEDBACK SYSTEM MESSAGES */}
+        {error && <div className="p-3 bg-red-950/40 border border-red-500/30 rounded text-red-300 text-xs mb-4 text-center">{error}</div>}
+        {successMessage && <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded text-emerald-300 text-xs mb-4 text-center">{successMessage}</div>}
+
+        {/* SCREEN 1: LOGIN FORM */}
+        {screen === 'login' && (
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-medium text-[#8AA3CC] mb-1 uppercase tracking-wider">Username</label>
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required autoComplete="username"
+                className="heatmap-input w-full px-4 py-2.5 bg-[#0A1628] border border-[#1E3660] rounded-lg text-white placeholder-[#5C7EB5] focus:outline-none focus:border-[#D4AF37] transition-colors text-sm"
+                placeholder="Enter username" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-medium text-[#8AA3CC] mb-1 uppercase tracking-wider">Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password"
+                className="heatmap-input w-full px-4 py-2.5 bg-[#0A1628] border border-[#1E3660] rounded-lg text-white placeholder-[#5C7EB5] focus:outline-none focus:border-[#D4AF37] transition-colors text-sm"
+                placeholder="Enter password" />
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full py-3 bg-gradient-to-r from-[#D4AF37] to-[#B8891E] text-[#060D18] font-bold text-sm rounded-lg hover:from-[#EFC94B] hover:to-[#D4AF37] transition-all duration-300 shadow-lg shadow-[#D4AF37]/10 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider">
+              {loading ? 'Authenticating...' : 'Access Dashboard'}
+            </button>
+          </form>
+        )}
+
+        {/* SCREEN 2: SIGN UP FORM */}
+        {screen === 'signup' && (
+          <form onSubmit={handleSignupSubmit} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[9px] font-semibold text-[#8AA3CC] mb-0.5 uppercase">Full Name</label>
+                <input type="text" value={regFullName} onChange={(e) => setRegFullName(e.target.value)} required
+                  className="heatmap-input w-full px-3 py-2 bg-[#0A1628] border border-[#1E3660] rounded text-white text-xs" placeholder="John Doe" />
+              </div>
+              <div>
+                <label className="block text-[9px] font-semibold text-[#8AA3CC] mb-0.5 uppercase">Company Name</label>
+                <input type="text" value={regCompany} onChange={(e) => setRegCompany(e.target.value)} required
+                  className="heatmap-input w-full px-3 py-2 bg-[#0A1628] border border-[#1E3660] rounded text-white text-xs" placeholder="Towing LLC" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[9px] font-semibold text-[#8AA3CC] mb-0.5 uppercase">Partner Type</label>
+                <select value={regPartnerType} onChange={(e) => setRegPartnerType(e.target.value)} className="heatmap-input w-full px-3 py-2 bg-[#0A1628] border border-[#1E3660] rounded text-white text-xs">
+                  <option value="Tow Company">Tow Company</option>
+                  <option value="Body Shop">Body Shop</option>
+                  <option value="Chiropractor">Chiropractor</option>
+                  <option value="Attorney">Attorney</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[9px] font-semibold text-[#8AA3CC] mb-0.5 uppercase">Territory / City</label>
+                <input type="text" value={regTerritory} onChange={(e) => setRegTerritory(e.target.value)} required
+                  className="heatmap-input w-full px-3 py-2 bg-[#0A1628] border border-[#1E3660] rounded text-white text-xs" placeholder="Atlanta Core" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[9px] font-semibold text-[#8AA3CC] mb-0.5 uppercase">Contact Phone</label>
+                <input type="text" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} required
+                  className="heatmap-input w-full px-3 py-2 bg-[#0A1628] border border-[#1E3660] rounded text-white text-xs" placeholder="404-555-0100" />
+              </div>
+              <div>
+                <label className="block text-[9px] font-semibold text-[#8AA3CC] mb-0.5 uppercase">Alert Number</label>
+                <input type="text" value={regNotificationPhone} onChange={(e) => setRegNotificationPhone(e.target.value)} required
+                  className="heatmap-input w-full px-3 py-2 bg-[#0A1628] border border-[#1E3660] rounded text-white text-xs" placeholder="Notifications phone" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[9px] font-semibold text-[#8AA3CC] mb-0.5 uppercase">Email Address</label>
+                <input type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required
+                  className="heatmap-input w-full px-3 py-2 bg-[#0A1628] border border-[#1E3660] rounded text-white text-xs" placeholder="john@example.com" />
+              </div>
+              <div>
+                <label className="block text-[9px] font-semibold text-[#8AA3CC] mb-0.5 uppercase">Desired Username</label>
+                <input type="text" value={regUsername} onChange={(e) => setRegUsername(e.target.value)} required
+                  className="heatmap-input w-full px-3 py-2 bg-[#0A1628] border border-[#1E3660] rounded text-white text-xs" placeholder="username" />
+              </div>
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full py-2.5 bg-gradient-to-r from-[#D4AF37] to-[#B8891E] text-[#060D18] font-bold text-xs rounded hover:from-[#EFC94B] hover:to-[#D4AF37] transition-all disabled:opacity-50 uppercase tracking-wider mt-2">
+              {loading ? 'Submitting Request...' : 'Submit Application'}
+            </button>
+          </form>
+        )}
+
+        {/* SCREEN 3: FORGOT PASSWORD FORM */}
+        {screen === 'forgot' && (
+          <form onSubmit={handleForgotSubmit} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-medium text-[#8AA3CC] mb-1 uppercase tracking-wider">Email or Username</label>
+              <input type="text" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} required
+                className="heatmap-input w-full px-4 py-2.5 bg-[#0A1628] border border-[#1E3660] rounded-lg text-white placeholder-[#5C7EB5] focus:outline-none focus:border-[#D4AF37] transition-colors text-sm"
+                placeholder="Enter email or username" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-medium text-[#8AA3CC] mb-1 uppercase tracking-wider">Phone Number</label>
+              <input type="text" value={forgotPhone} onChange={(e) => setForgotPhone(e.target.value)} required
+                className="heatmap-input w-full px-4 py-2.5 bg-[#0A1628] border border-[#1E3660] rounded-lg text-white placeholder-[#5C7EB5] focus:outline-none focus:border-[#D4AF37] transition-colors text-sm"
+                placeholder="Enter registered phone" />
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full py-3 bg-gradient-to-r from-[#D4AF37] to-[#B8891E] text-[#060D18] font-bold text-sm rounded-lg hover:from-[#EFC94B] hover:to-[#D4AF37] transition-all duration-300 shadow-lg disabled:opacity-50 uppercase tracking-wider">
+              {loading ? 'Submitting Recovery...' : 'Request Password Reset'}
+            </button>
+          </form>
+        )}
+
+        {/* MULTI-FLOW LINK NAVIGATION ROW */}
+        <div className="flex justify-between items-center text-xs mt-6 pt-4 border-t border-[#1E3660]/30">
+          {screen === 'login' ? (
+            <>
+              <span className="text-[#5C7EB5] hover:text-[#D4AF37] cursor-pointer transition-colors" onClick={() => setScreen('signup')}>
+                Apply/Sign Up
+              </span>
+              <span className="text-[#5C7EB5] hover:text-[#D4AF37] cursor-pointer transition-colors" onClick={() => setScreen('forgot')}>
+                Forgot Password?
+              </span>
+            </>
+          ) : (
+            <span className="text-[#5C7EB5] hover:text-[#D4AF37] cursor-pointer transition-colors mx-auto" onClick={() => setScreen('login')}>
+              ← Back to Login
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAP DASHBOARD
+// MAP DASHBOARD MODULE
 // ─────────────────────────────────────────────────────────────────────────────
 function MapDashboard({ onLogout }) {
   const mapContainerRef = useRef(null);
@@ -169,7 +401,6 @@ function MapDashboard({ onLogout }) {
         duration: 0.8,
       });
 
-      // Automatically open popup if layer exists
       if (layerGroupRef.current) {
         layerGroupRef.current.eachLayer((layer) => {
           if (layer instanceof window.L.CircleMarker) {
@@ -181,7 +412,6 @@ function MapDashboard({ onLogout }) {
         });
       }
 
-      // On mobile, collapse bottom sheet to show map focus
       if (isMobile) {
         setMobileExpanded(false);
       }
@@ -205,7 +435,6 @@ function MapDashboard({ onLogout }) {
       const color = inc.severity === 'High' ? '#EF4444' : inc.severity === 'Medium' ? '#F97316' : '#F59E0B';
       const ageMultiplier = getAgeDecay(inc.createdAt);
 
-      // Stable target ring matching incident coordinate
       const baseRadius = inc.severity === 'High' ? 380 : inc.severity === 'Medium' ? 240 : 140;
       
       // 1. Radar Targeting Ring (Sharp neon border, soft internal glow)
@@ -267,7 +496,6 @@ function MapDashboard({ onLogout }) {
     if (!headerEl) return;
 
     const handleHeaderTap = (e) => {
-      // Toggle state directly on mobile click/tap
       if (window.innerWidth <= 640) {
         e.preventDefault();
         e.stopPropagation();
@@ -298,10 +526,8 @@ function MapDashboard({ onLogout }) {
       maxBoundsViscosity: 0.95,
       zoomControl: true,
       attributionControl: true,
-      // Standard smooth zooming behavior
       zoomSnap: 1,
       zoomDelta: 1,
-      // Mobile touch & drag optimization
       tap: true,
       touchZoom: true,
       dragging: true,
@@ -309,7 +535,6 @@ function MapDashboard({ onLogout }) {
       inertia: true,
     });
 
-    // LIGHT ROADMAP TILES (CartoDB Voyager) — roads and street names are 100% visible
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       attribution: '© <a href="https://carto.com/">CARTO</a> | © <a href="https://osm.org/">OSM</a>',
       subdomains: 'abcd',
@@ -367,7 +592,6 @@ function MapDashboard({ onLogout }) {
     }
   };
 
-  // Mutually exclusive CSS class generators to avoid specificity conflicts on mobile
   const panelClass = isMobile
     ? `heatmap-side-panel ${mobileExpanded ? 'mobile-expanded' : ''}`
     : `heatmap-side-panel ${sidebarOpen ? '' : 'panel-closed'}`;
@@ -438,7 +662,7 @@ function MapDashboard({ onLogout }) {
               <span className="text-[#5C7EB5] text-[9px] uppercase tracking-wider">90m range</span>
               <button 
                 className="text-[#5C7EB5] hover:text-white transition-colors p-1"
-                style={{ pointerEvents: 'none' }} // Let touch events bubble straight to headerRef
+                style={{ pointerEvents: 'none' }}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={mobileExpanded ? "M19 15l-7-7-7 7" : "M19 9l-7 7-7-7"} className="sm:hidden" />

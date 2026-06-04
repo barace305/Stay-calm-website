@@ -5,6 +5,7 @@ import Chiropractor from './pages/Chiropractor';
 import Towing from './pages/Towing';
 import BodyShop from './pages/BodyShop';
 import HeatMap from './pages/HeatMap';
+import Admin from './pages/Admin';
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/body-shop" element={<BodyShop />} />
         <Route path="/bodyshop" element={<BodyShop />} />
         <Route path="/heatmap" element={<HeatMap />} />
+        <Route path="/admin" element={<Admin />} />
       </Routes>
     </Router>
   );
