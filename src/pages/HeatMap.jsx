@@ -14,9 +14,9 @@ import '../styles/heatmap.css';
  *
  * Private page at /heatmap with:
  * 1. Login gate (demo: tone1234 / tone1234)
- * 2. Full-screen map with futuristic neon radar target rings
- * 3. Mobile bottom sheet drawer (collapsible, always visible)
- * 4. Tap-to-focus interaction mapping and automatic detail popups
+ * 2. Full-screen map with premium light map tiles (Voyager)
+ * 3. Stable geographic neon radar target rings
+ * 4. Collapsible mobile bottom sheet (always visible at bottom)
  */
 
 const DEMO_USERNAME = 'tone1234';
@@ -209,10 +209,10 @@ function MapDashboard({ onLogout }) {
       L.circle([inc.latitude, inc.longitude], {
         radius: baseRadius,
         color: color,
-        weight: 1.5,
-        opacity: 0.8 * ageMultiplier,
+        weight: 2,
+        opacity: 0.9 * ageMultiplier,
         fillColor: color,
-        fillOpacity: 0.08 * ageMultiplier,
+        fillOpacity: 0.12 * ageMultiplier,
         className: 'radar-ring',
         interactive: false,
       }).addTo(group);
@@ -221,7 +221,7 @@ function MapDashboard({ onLogout }) {
       L.circle([inc.latitude, inc.longitude], {
         radius: baseRadius * 1.5,
         color: color,
-        weight: 0.8,
+        weight: 1,
         fill: false,
         className: 'radar-ring-pulse',
         interactive: false,
@@ -229,7 +229,7 @@ function MapDashboard({ onLogout }) {
 
       // 3. Central digital point marker
       const marker = L.circleMarker([inc.latitude, inc.longitude], {
-        radius: 5.5,
+        radius: 6,
         fillColor: '#FFFFFF',
         color: color,
         weight: 2,
@@ -269,7 +269,7 @@ function MapDashboard({ onLogout }) {
       minZoom: MAP_MIN_ZOOM,
       maxZoom: MAP_MAX_ZOOM,
       maxBounds: MAP_BOUNDS,
-      maxBoundsViscosity: 0.9,
+      maxBoundsViscosity: 0.95,
       zoomControl: true,
       attributionControl: true,
       // Standard smooth zooming behavior
@@ -283,7 +283,8 @@ function MapDashboard({ onLogout }) {
       inertia: true,
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // LIGHT ROADMAP TILES (CartoDB Voyager) — roads and street names are 100% visible
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       attribution: '© <a href="https://carto.com/">CARTO</a> | © <a href="https://osm.org/">OSM</a>',
       subdomains: 'abcd',
       maxZoom: 19,
