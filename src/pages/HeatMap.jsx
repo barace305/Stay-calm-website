@@ -146,7 +146,10 @@ function MapDashboard({ onLogout }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const layerGroupRef = useRef(null);
+  const panelRef = useRef(null);
+  
   const [activeIncidents, setActiveIncidents] = useState([]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 640);
   const [mobileExpanded, setMobileExpanded] = useState(false);
 
@@ -179,7 +182,7 @@ function MapDashboard({ onLogout }) {
       }
 
       // On mobile, collapse bottom sheet to show map focus
-      if (window.innerWidth <= 640) {
+      if (isMobile) {
         setMobileExpanded(false);
       }
     }
@@ -258,6 +261,15 @@ function MapDashboard({ onLogout }) {
     });
   }, []);
 
+  // Prevent Leaflet map from stealing click/scroll/drag events from the bottom sheet
+  useEffect(() => {
+    const L = window.L;
+    if (L && panelRef.current) {
+      L.DomEvent.disableClickPropagation(panelRef.current);
+      L.DomEvent.disableScrollPropagation(panelRef.current);
+    }
+  });
+
   // Initialize Map
   useEffect(() => {
     const L = window.L;
@@ -297,7 +309,9 @@ function MapDashboard({ onLogout }) {
     updateHeatLayer(map, active);
 
     const handleResize = () => {
-      if (window.innerWidth > 640) {
+      const mobile = window.innerWidth <= 640;
+      setIsMobile(mobile);
+      if (!mobile) {
         setSidebarOpen(true);
       } else {
         setSidebarOpen(false);
@@ -324,8 +338,9 @@ function MapDashboard({ onLogout }) {
     return () => clearInterval(interval);
   }, [refreshIncidents, updateHeatLayer]);
 
-  const handleMobileHeaderClick = () => {
-    if (window.innerWidth <= 640) {
+  const handleMobileHeaderClick = (e) => {
+    if (isMobile) {
+      e.stopPropagation();
       setMobileExpanded(!mobileExpanded);
     }
   };
@@ -344,6 +359,11 @@ function MapDashboard({ onLogout }) {
         return 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z';
     }
   };
+
+  // Mutually exclusive CSS class generators to avoid specificity conflicts on mobile
+  const panelClass = isMobile
+    ? `heatmap-side-panel ${mobileExpanded ? 'mobile-expanded' : ''}`
+    : `heatmap-side-panel ${sidebarOpen ? '' : 'panel-closed'}`;
 
   return (
     <div className="heatmap-container fixed inset-0 bg-[#060D18] font-sans antialiased overflow-hidden flex flex-col" style={{ height: '100dvh' }}>
@@ -390,7 +410,7 @@ function MapDashboard({ onLogout }) {
         </button>
 
         {/* Sidebar / Mobile Bottom Sheet */}
-        <div className={`heatmap-side-panel ${sidebarOpen ? '' : 'panel-closed'} ${mobileExpanded ? 'mobile-expanded' : ''}`}>
+        <div ref={panelRef} className={panelClass}>
           {/* Mobile swipe/drag handle */}
           <div className="mobile-drag-handle" onClick={handleMobileHeaderClick} />
 
@@ -410,14 +430,7 @@ function MapDashboard({ onLogout }) {
             <div className="flex items-center gap-2">
               <span className="text-[#5C7EB5] text-[9px] uppercase tracking-wider">90m range</span>
               <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (window.innerWidth <= 640) {
-                    setMobileExpanded(!mobileExpanded);
-                  } else {
-                    setSidebarOpen(false);
-                  }
-                }} 
+                onClick={handleMobileHeaderClick} 
                 className="text-[#5C7EB5] hover:text-white transition-colors p-1"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
