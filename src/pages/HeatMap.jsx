@@ -5,130 +5,66 @@ import {
   getSeverityIntensity,
   getAgeDecay,
   formatRelativeTime,
+  formatClockTime,
 } from '../data/heatmapData';
 import '../styles/heatmap.css';
 
 /**
- * Stay Calm — Live Heat Map (Partner Demo Tool)
+ * Stay Calm — Futuristic Live Heat Map (Partner Demo Tool)
  *
  * Private page at /heatmap with:
  * 1. Login gate (demo: tone1234 / tone1234)
- * 2. Full-screen Leaflet map with heat layer
- * 3. Floating glass sidebar showing recent incidents
- * 4. 90-minute auto-scrub on incident data
- *
- * FUTURE AUTH INTEGRATION:
- * Replace the authenticate() function with real auth provider
- * (Firebase Auth, Supabase Auth, NextAuth, JWT, etc.)
+ * 2. Full-screen map with futuristic neon radar target rings
+ * 3. Mobile bottom sheet drawer (collapsible, always visible)
+ * 4. Tap-to-focus interaction mapping and automatic detail popups
  */
 
-// ─── DEMO CREDENTIALS ──────────────────────────────────────────────────────
 const DEMO_USERNAME = 'tone1234';
 const DEMO_PASSWORD = 'tone1234';
 
-// ─── METRO ATLANTA MAP CONFIG ───────────────────────────────────────────────
-// Tighter framing: centered on the Metro ATL core, zoomed in enough
-// to show the perimeter clearly without drifting to all of Georgia.
-const MAP_CENTER = [33.82, -84.33];
-const MAP_ZOOM = 11;
-const MAP_MIN_ZOOM = 9;
+// Centered on Midtown/Downtown Connector area
+const MAP_CENTER = [33.785, -84.385];
+const MAP_ZOOM = 12;
+const MAP_MIN_ZOOM = 10;
 const MAP_MAX_ZOOM = 17;
-// Constrain panning to Metro Atlanta region (no more scrolling to Florida)
 const MAP_BOUNDS = [
-  [33.40, -84.90],  // SW corner
-  [34.20, -83.70],  // NE corner
+  [33.55, -84.65],  // SW
+  [34.15, -84.05],  // NE
 ];
 
-// ─── HEAT LAYER CONFIG ──────────────────────────────────────────────────────
-// Large radius + heavy blur = big glowing cloud zones that merge when
-// incidents cluster. Gradient: amber outer glow → orange mid → crimson core.
-const HEAT_OPTIONS = {
-  radius: 55,
-  blur: 40,
-  maxZoom: 14,
-  max: 1.0,
-  minOpacity: 0.15,
-  gradient: {
-    0.0:  'transparent',
-    0.15: '#D4AF37',
-    0.30: '#EAB308',
-    0.45: '#F59E0B',
-    0.55: '#F97316',
-    0.70: '#EF4444',
-    0.85: '#DC2626',
-    1.0:  '#991B1B',
-  },
-};
-
-// ─── REFRESH INTERVAL (ms) ──────────────────────────────────────────────────
 const REFRESH_INTERVAL = 60000;
-
-// ─── CLOUD SPREAD CONFIG ────────────────────────────────────────────────────
-// Generates sub-points around each incident so they look like glowing zones
-// instead of hard dots. When clusters are close, their zones merge into one
-// larger cloud that intensifies in color.
-const SPREAD_CONFIG = {
-  High:   { count: 6, radius: 0.010 },
-  Medium: { count: 4, radius: 0.008 },
-  Low:    { count: 2, radius: 0.005 },
-};
-
-// Deterministic pseudo-random so cloud shapes stay consistent
-function seededRandom(seed) {
-  let x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-}
-
-// Generate cloud heat points from active incidents
-function generateCloudHeatPoints(activeIncidents) {
-  const points = [];
-
-  activeIncidents.forEach((inc, idx) => {
-    const baseIntensity = getSeverityIntensity(inc.severity);
-    const ageMultiplier = getAgeDecay(inc.createdAt);
-    const intensity = baseIntensity * ageMultiplier;
-
-    // Center point — full intensity
-    points.push([inc.latitude, inc.longitude, intensity]);
-
-    // Spread points — create the cloud zone
-    const spread = SPREAD_CONFIG[inc.severity] || SPREAD_CONFIG.Medium;
-    for (let i = 0; i < spread.count; i++) {
-      const seed = idx * 100 + i;
-      const angle = (2 * Math.PI * i) / spread.count + seededRandom(seed) * 0.4;
-      const dist = spread.radius * (0.4 + seededRandom(seed + 50) * 0.6);
-      const subIntensity = intensity * (0.3 + seededRandom(seed + 99) * 0.3);
-
-      points.push([
-        inc.latitude + dist * Math.cos(angle),
-        inc.longitude + dist * Math.sin(angle),
-        subIntensity,
-      ]);
-    }
-
-    // Inner ring for High severity — denser glowing core
-    if (inc.severity === 'High') {
-      for (let j = 0; j < 3; j++) {
-        const seed2 = idx * 200 + j;
-        const angle2 = (2 * Math.PI * j) / 3 + seededRandom(seed2 + 150) * 0.3;
-        const dist2 = spread.radius * 0.2;
-        points.push([
-          inc.latitude + dist2 * Math.cos(angle2),
-          inc.longitude + dist2 * Math.sin(angle2),
-          intensity * 0.85,
-        ]);
-      }
-    }
-  });
-
-  return points;
-}
-
 
 export default function HeatMap() {
   const [authenticated, setAuthenticated] = useState(
     () => sessionStorage.getItem('sc_heatmap_auth') === 'true'
   );
+
+  // Lock document body and viewport scrolling to prevent rubber-banding on iOS
+  useEffect(() => {
+    if (!authenticated) return;
+
+    // Save original styles
+    const origOverflow = document.documentElement.style.overflow;
+    const origBodyOverflow = document.body.style.overflow;
+    const origBodyPos = document.body.style.position;
+    const origBodyWidth = document.body.style.width;
+    const origBodyHeight = document.body.style.height;
+
+    // Apply strict screen locking
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+
+    return () => {
+      document.documentElement.style.overflow = origOverflow;
+      document.body.style.overflow = origBodyOverflow;
+      document.body.style.position = origBodyPos;
+      document.body.style.width = origBodyWidth;
+      document.body.style.height = origBodyHeight;
+    };
+  }, [authenticated]);
 
   return authenticated ? (
     <MapDashboard onLogout={() => {
@@ -143,10 +79,9 @@ export default function HeatMap() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 // LOGIN SCREEN
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ─────────────────────────────────────────────────────────────────────────────
 function LoginScreen({ onAuth }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -160,9 +95,6 @@ function LoginScreen({ onAuth }) {
 
     await new Promise((r) => setTimeout(r, 600));
 
-    /**
-     * FUTURE: Replace with real auth (Firebase, Supabase, JWT, etc.)
-     */
     if (username === DEMO_USERNAME && password === DEMO_PASSWORD) {
       onAuth();
     } else {
@@ -204,19 +136,18 @@ function LoginScreen({ onAuth }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 // MAP DASHBOARD
-// ═══════════════════════════════════════════════════════════════════════════
-
+// ─────────────────────────────────────────────────────────────────────────────
 function MapDashboard({ onLogout }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const heatLayerRef = useRef(null);
+  const layerGroupRef = useRef(null);
   const [activeIncidents, setActiveIncidents] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 640);
-  const [showPwaBanner, setShowPwaBanner] = useState(true);
+  const [mobileExpanded, setMobileExpanded] = useState(false);
 
-  // ─── Load & refresh incident data ─────────────────────────────────────
+  // Load and refresh active incident lists
   const refreshIncidents = useCallback(() => {
     const allIncidents = generateDemoIncidents();
     const active = getActiveIncidents(allIncidents);
@@ -224,7 +155,107 @@ function MapDashboard({ onLogout }) {
     return active;
   }, []);
 
-  // ─── Initialize map ───────────────────────────────────────────────────
+  // Center on incident when clicked in list
+  const handleIncidentClick = (inc) => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setView([inc.latitude, inc.longitude], 15, {
+        animate: true,
+        duration: 0.8,
+      });
+
+      // Automatically open popup if layer exists
+      if (layerGroupRef.current) {
+        layerGroupRef.current.eachLayer((layer) => {
+          if (layer instanceof window.L.CircleMarker) {
+            const latLng = layer.getLatLng();
+            if (latLng.lat === inc.latitude && latLng.lng === inc.longitude) {
+              layer.openPopup();
+            }
+          }
+        });
+      }
+
+      // On mobile, collapse bottom sheet to show map focus
+      if (window.innerWidth <= 640) {
+        setMobileExpanded(false);
+      }
+    }
+  };
+
+  // Re-draw futuristic radar ring targets and markers
+  const updateHeatLayer = useCallback((map, activeList) => {
+    const L = window.L;
+    if (!L) return;
+
+    if (!layerGroupRef.current) {
+      layerGroupRef.current = L.layerGroup().addTo(map);
+    } else {
+      layerGroupRef.current.clearLayers();
+    }
+
+    const group = layerGroupRef.current;
+
+    activeList.forEach((inc) => {
+      const color = inc.severity === 'High' ? '#EF4444' : inc.severity === 'Medium' ? '#F97316' : '#F59E0B';
+      const ageMultiplier = getAgeDecay(inc.createdAt);
+
+      // Stable target ring matching incident coordinate
+      const baseRadius = inc.severity === 'High' ? 380 : inc.severity === 'Medium' ? 240 : 140;
+      
+      // 1. Radar Targeting Ring (Sharp neon border, soft internal glow)
+      L.circle([inc.latitude, inc.longitude], {
+        radius: baseRadius,
+        color: color,
+        weight: 1.5,
+        opacity: 0.8 * ageMultiplier,
+        fillColor: color,
+        fillOpacity: 0.08 * ageMultiplier,
+        className: 'radar-ring',
+        interactive: false,
+      }).addTo(group);
+
+      // 2. Pulse target expansion ring
+      L.circle([inc.latitude, inc.longitude], {
+        radius: baseRadius * 1.5,
+        color: color,
+        weight: 0.8,
+        fill: false,
+        className: 'radar-ring-pulse',
+        interactive: false,
+      }).addTo(group);
+
+      // 3. Central digital point marker
+      const marker = L.circleMarker([inc.latitude, inc.longitude], {
+        radius: 5.5,
+        fillColor: '#FFFFFF',
+        color: color,
+        weight: 2,
+        fillOpacity: 1.0,
+        className: 'radar-dot',
+      }).addTo(group);
+
+      const popupContent = `
+        <div class="heatmap-popup-card">
+          <div class="popup-header">
+            <span class="popup-title">${inc.type}</span>
+            <span class="popup-badge ${inc.severity.toLowerCase()}">${inc.severity}</span>
+          </div>
+          <p class="popup-location">${inc.location}</p>
+          <div class="popup-meta">
+            <span>Reported ${formatClockTime(inc.createdAt)} (${formatRelativeTime(inc.createdAt)})</span>
+          </div>
+        </div>
+      `;
+
+      marker.bindPopup(popupContent, {
+        className: 'heatmap-leaflet-popup',
+        closeButton: false,
+        offset: [0, -4],
+      });
+    });
+  }, []);
+
+  // Initialize Map
   useEffect(() => {
     const L = window.L;
     if (!L || !mapContainerRef.current || mapInstanceRef.current) return;
@@ -235,23 +266,20 @@ function MapDashboard({ onLogout }) {
       minZoom: MAP_MIN_ZOOM,
       maxZoom: MAP_MAX_ZOOM,
       maxBounds: MAP_BOUNDS,
-      maxBoundsViscosity: 0.8,
+      maxBoundsViscosity: 0.9,
       zoomControl: true,
       attributionControl: true,
-      // Smooth zoom behavior
-      zoomSnap: 0.5,
-      zoomDelta: 0.5,
-      wheelPxPerZoomLevel: 120,
-      // Touch optimization
+      // Standard smooth zooming behavior
+      zoomSnap: 1,
+      zoomDelta: 1,
+      // Mobile touch & drag optimization
       tap: true,
       touchZoom: true,
       dragging: true,
       bounceAtZoomLimits: true,
       inertia: true,
-      inertiaDeceleration: 3000,
     });
 
-    // CartoDB Dark Matter tiles — premium dark aesthetic
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '© <a href="https://carto.com/">CARTO</a> | © <a href="https://osm.org/">OSM</a>',
       subdomains: 'abcd',
@@ -261,18 +289,27 @@ function MapDashboard({ onLogout }) {
     map.zoomControl.setPosition('topright');
     mapInstanceRef.current = map;
 
-    // Initial data load + heat layer
     const active = refreshIncidents();
     updateHeatLayer(map, active);
 
+    const handleResize = () => {
+      if (window.innerWidth > 640) {
+        setSidebarOpen(true);
+      } else {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
+      window.removeEventListener('resize', handleResize);
       map.remove();
       mapInstanceRef.current = null;
-      heatLayerRef.current = null;
+      layerGroupRef.current = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [refreshIncidents, updateHeatLayer]);
 
-  // ─── Auto-refresh every 60s ───────────────────────────────────────────
+  // Periodic Auto-refresh
   useEffect(() => {
     const interval = setInterval(() => {
       const active = refreshIncidents();
@@ -281,24 +318,15 @@ function MapDashboard({ onLogout }) {
       }
     }, REFRESH_INTERVAL);
     return () => clearInterval(interval);
-  }, [refreshIncidents]);
+  }, [refreshIncidents, updateHeatLayer]);
 
-  // ─── Update heat layer ────────────────────────────────────────────────
-  function updateHeatLayer(map, activeList) {
-    const L = window.L;
-    if (!L || !L.heatLayer) return;
-
-    if (heatLayerRef.current) {
-      map.removeLayer(heatLayerRef.current);
+  const handleMobileHeaderClick = () => {
+    if (window.innerWidth <= 640) {
+      setMobileExpanded(!mobileExpanded);
     }
+  };
 
-    const heatData = generateCloudHeatPoints(activeList);
-    const heat = L.heatLayer(heatData, HEAT_OPTIONS).addTo(map);
-    heatLayerRef.current = heat;
-  }
-
-  // ─── Incident icon SVG paths ──────────────────────────────────────────
-  function getIncidentIcon(type) {
+  const getIncidentIconPath = (type) => {
     switch (type) {
       case 'Multi-Vehicle Collision':
         return 'M13 10V3L4 14h7v7l9-11h-7z';
@@ -311,31 +339,31 @@ function MapDashboard({ onLogout }) {
       default:
         return 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z';
     }
-  }
+  };
 
   return (
     <div className="heatmap-container fixed inset-0 bg-[#060D18] font-sans antialiased overflow-hidden" style={{ height: '100dvh' }}>
 
       {/* ─── HEADER BAR ──────────────────────────────────────────────── */}
-      <div className="heatmap-header fixed top-0 left-0 right-0 z-[1000] px-4 py-3 flex items-center justify-between">
+      <div className="heatmap-header fixed top-0 left-0 right-0 z-[1000] px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Stay Calm" className="h-[60px] w-auto object-contain -my-4" />
+          <img src="/logo.png" alt="Stay Calm" className="h-[54px] w-auto object-contain -my-4" />
           <div className="flex flex-col">
-            <span className="text-white font-bold text-xs tracking-[0.15em] uppercase leading-none">Stay Calm Today</span>
-            <span className="text-[#8AA3CC] text-[10px] tracking-wider uppercase mt-0.5">Partner Heat Map</span>
+            <span className="text-white font-bold text-xs tracking-[0.12em] uppercase leading-none">Stay Calm Today</span>
+            <span className="text-[#8AA3CC] text-[9px] tracking-wider uppercase mt-0.5">Partner Heat Map</span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-[#0A1628]/80 px-3 py-1.5 rounded-full border border-[#1E3660]/50">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-[#0A1628]/80 px-2.5 py-1 rounded-full border border-[#1E3660]/40">
             <span className="live-dot" />
-            <span className="text-[#22C55E] text-xs font-bold tracking-wider uppercase">Live</span>
+            <span className="text-[#22C55E] text-[10px] font-bold tracking-wider uppercase">Live</span>
           </div>
-          <div className="flex items-center gap-1.5 bg-[#0A1628]/80 px-3 py-1.5 rounded-full border border-[#1E3660]/50">
-            <span className="text-[#D4AF37] text-xs font-bold">{activeIncidents.length}</span>
-            <span className="text-[#8AA3CC] text-[10px] uppercase tracking-wider">Active</span>
+          <div className="flex items-center gap-1 bg-[#0A1628]/80 px-2.5 py-1 rounded-full border border-[#1E3660]/40">
+            <span className="text-[#D4AF37] text-[10px] font-bold">{activeIncidents.length}</span>
+            <span className="text-[#8AA3CC] text-[9px] uppercase tracking-wider">Active</span>
           </div>
-          <button onClick={onLogout} className="text-[#5C7EB5] hover:text-[#D4AF37] transition-colors p-1.5" title="Sign out">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button onClick={onLogout} className="text-[#5C7EB5] hover:text-[#D4AF37] transition-colors p-1" title="Sign out">
+            <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
           </button>
@@ -345,38 +373,50 @@ function MapDashboard({ onLogout }) {
       {/* ─── MAP ─────────────────────────────────────────────────────── */}
       <div ref={mapContainerRef} className="absolute inset-0 z-0" style={{ width: '100%', height: '100%' }} />
 
-      {/* ─── SIDEBAR TOGGLE BUTTON ───────────────────────────────────── */}
+      {/* ─── SIDEBAR TOGGLE BUTTON (Desktop Only) ────────────────────── */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
         className={`panel-toggle-btn ${sidebarOpen ? 'panel-is-open' : ''}`}
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          {sidebarOpen ? (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-          ) : (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
-          )}
+        <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
 
-      {/* ─── FLOATING SIDE PANEL ─────────────────────────────────────── */}
-      <div className={`heatmap-side-panel ${sidebarOpen ? '' : 'panel-closed'}`}>
+      {/* ─── FLOATING SIDE PANEL / COLLAPSIBLE BOTTOM SHEET ──────────── */}
+      <div className={`heatmap-side-panel ${sidebarOpen ? '' : 'panel-closed'} ${mobileExpanded ? 'mobile-expanded' : ''}`}>
+        {/* Mobile Swipe / Drag Handle */}
+        <div className="mobile-drag-handle" onClick={handleMobileHeaderClick} />
+
         {/* Panel Header */}
-        <div className="px-4 pt-4 pb-3 flex items-center justify-between border-b border-[#1E3660]/30">
+        <div 
+          className="px-4 pt-1.5 pb-2.5 flex items-center justify-between border-b border-[#1E3660]/20 cursor-pointer sm:cursor-default select-none"
+          onClick={handleMobileHeaderClick}
+        >
           <div className="flex items-center gap-2">
-            <h2 className="text-white font-bold text-[11px] tracking-[0.12em] uppercase">
+            <h2 className="text-white font-bold text-[10px] tracking-[0.1em] uppercase">
               Live Incidents
             </h2>
-            <span className="bg-[#D4AF37]/15 text-[#D4AF37] text-[9px] font-bold px-2 py-0.5 rounded-full">
+            <span className="bg-[#D4AF37]/15 text-[#D4AF37] text-[9px] font-bold px-1.5 py-0.5 rounded-full">
               {activeIncidents.length}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[#5C7EB5] text-[9px] uppercase tracking-wider">90 min</span>
-            {/* Close button (visible on all screens) */}
-            <button onClick={() => setSidebarOpen(false)} className="text-[#5C7EB5] hover:text-white transition-colors p-1 -mr-1">
+            <span className="text-[#5C7EB5] text-[9px] uppercase tracking-wider">90m range</span>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.innerWidth <= 640) {
+                  setMobileExpanded(!mobileExpanded);
+                } else {
+                  setSidebarOpen(false);
+                }
+              }} 
+              className="text-[#5C7EB5] hover:text-white transition-colors p-1"
+            >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={mobileExpanded ? "M19 15l-7-7-7 7" : "M19 9l-7 7-7-7"} className="sm:hidden" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" className="hidden sm:inline" />
               </svg>
             </button>
           </div>
@@ -392,20 +432,21 @@ function MapDashboard({ onLogout }) {
             activeIncidents.map((inc) => (
               <div
                 key={inc.id}
-                className={`incident-row severity-${inc.severity.toLowerCase()} flex items-center gap-2.5 px-2.5 py-2.5 mb-0.5 rounded-lg`}
+                onClick={() => handleIncidentClick(inc)}
+                className={`incident-row severity-${inc.severity.toLowerCase()} flex items-center gap-2 px-2 py-2 mb-0.5 rounded-lg`}
               >
                 <div className={`incident-icon ${inc.severity.toLowerCase()}`}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={getIncidentIcon(inc.type)} />
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={getIncidentIconPath(inc.type)} />
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-xs font-semibold truncate">{inc.type}</p>
-                  <p className="text-[#8AA3CC] text-[10px] truncate leading-tight">{inc.location}</p>
+                  <p className="text-white text-xs font-semibold truncate leading-normal">{inc.type}</p>
+                  <p className="text-[#8AA3CC] text-[10px] truncate leading-tight mt-0.5">{inc.location}</p>
                 </div>
-                <div className="flex flex-col items-end gap-0.5 shrink-0">
+                <div className="flex flex-col items-end gap-0.5 shrink-0 pl-1">
                   <span className={`severity-badge ${inc.severity.toLowerCase()}`}>{inc.severity}</span>
-                  <span className="text-[#5C7EB5] text-[9px] whitespace-nowrap">{formatRelativeTime(inc.createdAt)}</span>
+                  <span className="text-[#5C7EB5] text-[8.5px] whitespace-nowrap mt-0.5">{formatRelativeTime(inc.createdAt)}</span>
                 </div>
               </div>
             ))
@@ -413,32 +454,12 @@ function MapDashboard({ onLogout }) {
         </div>
 
         {/* Panel Footer */}
-        <div className="px-4 py-2.5 border-t border-[#1E3660]/30 text-center">
+        <div className="px-4 py-2 border-t border-[#1E3660]/20 text-center hidden sm:block">
           <p className="text-[#5C7EB5] text-[9px] uppercase tracking-wider">
             Stay Calm • Metro Atlanta Coverage
           </p>
         </div>
       </div>
-
-      {/* ─── PWA INSTALL BANNER (top-right toast) ────────────────────── */}
-      {showPwaBanner && (
-        <div className="pwa-banner fixed z-[1100] top-[62px] right-3 rounded-xl px-3 py-2.5 flex items-center gap-2.5 max-w-[280px]">
-          <div className="w-7 h-7 rounded-lg bg-[#D4AF37]/10 flex items-center justify-center shrink-0">
-            <svg className="w-3.5 h-3.5 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-          </div>
-          <p className="text-[10px] leading-tight">
-            <span className="text-white font-semibold">Install Heatmap</span>
-            <span className="text-[#8AA3CC]"> for real-time tracking</span>
-          </p>
-          <button onClick={() => setShowPwaBanner(false)} className="text-[#5C7EB5] hover:text-white transition-colors shrink-0 p-0.5">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
     </div>
   );
 }
