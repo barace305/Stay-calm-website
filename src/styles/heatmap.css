@@ -17,15 +17,15 @@ html, body, #root {
 
 /* ─── LEAFLET MAP OVERRIDES ──────────────────────────────────────────────── */
 .heatmap-container .leaflet-control-attribution {
-  background: rgba(6, 13, 24, 0.85) !important;
-  color: rgba(138, 163, 204, 0.7) !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+  color: #333333 !important;
   font-size: 8px !important;
   backdrop-filter: blur(4px);
   border: none !important;
 }
 
 .heatmap-container .leaflet-control-attribution a {
-  color: rgba(212, 175, 55, 0.7) !important;
+  color: #060d18 !important;
 }
 
 /* Position zoom controls cleanly inside map area */
@@ -33,7 +33,7 @@ html, body, #root {
   border: 1px solid rgba(212, 175, 55, 0.25) !important;
   border-radius: 8px !important;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
   margin-top: 12px !important;
 }
 
@@ -53,13 +53,9 @@ html, body, #root {
   color: #EFC94B !important;
 }
 
-/* 
-   PREMIUM SEMI-DARK ROADMAP VISIBILITY
-   Uses the detailed light Voyager tiles, but applies a custom contrast/brightness filter
-   to darken the background while making the roads, highways, and labels pop out clearly.
-*/
+/* Premium Semi-Dark Map tiles filter */
 .heatmap-container .leaflet-tile-pane {
-  filter: brightness(0.65) contrast(1.25) saturate(0.95) !important;
+  filter: brightness(0.68) contrast(1.25) saturate(0.95) !important;
 }
 
 /* ─── PULSING LIVE INDICATOR ─────────────────────────────────────────────── */
@@ -205,28 +201,34 @@ html, body, #root {
   z-index: 1000;
 }
 
-/* ─── FLOATING SIDE PANEL (Desktop & Mobile Drawer Sheet) ───────────────── */
+/* ─── FLOATING SIDE PANEL / DOCK SHEET (Glassmorphism & Transparency) ───── */
 .heatmap-side-panel {
   position: absolute;
   top: 12px;
   left: 12px;
   bottom: 12px;
   width: 310px;
-  background: rgba(6, 13, 24, 0.9);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(212, 175, 55, 0.15);
+  /* FUTURISTIC TRANSPARENT GLASS */
+  background: rgba(6, 13, 24, 0.65) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(212, 175, 55, 0.25) !important;
   border-radius: 14px;
   z-index: 999;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  box-shadow:
+    0 -8px 32px rgba(212, 175, 55, 0.03),
+    0 8px 32px rgba(0, 0, 0, 0.6);
   transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.heatmap-side-panel.panel-closed {
-  transform: translateX(calc(-100% - 20px));
+/* Desktop-only closed state translation */
+@media (min-width: 641px) {
+  .heatmap-side-panel.panel-closed {
+    transform: translateX(calc(-100% - 20px)) !important;
+  }
 }
 
 .heatmap-side-panel::before {
@@ -236,13 +238,10 @@ html, body, #root {
   left: 12px;
   right: 12px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.3), transparent);
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.35), transparent);
 }
 
-/* 
-   MOBILE BOTTOM SHEET OVERHAUL
-   Uses fixed height & GPU-accelerated translateY transitions for buttery-smooth performance.
-*/
+/* Mobile Bottom Sheet Layout */
 @media (max-width: 640px) {
   .heatmap-side-panel {
     width: 100% !important;
@@ -251,21 +250,19 @@ html, body, #root {
     bottom: 0 !important;
     top: auto !important;
     border-radius: 16px 16px 0 0 !important;
-    border: 1px solid rgba(212, 175, 55, 0.2) !important;
-    border-bottom: none !important;
-    height: 45vh !important; /* Fixed height for translation */
-    transform: translateY(calc(45vh - 54px)) !important; /* Collapsed state showing just the 54px header */
+    border-left: none !important;
+    border-right: none !important;
+    border-top: 1px solid rgba(212, 175, 55, 0.25) !important;
+    height: 45vh !important; /* Fixed sheet height */
     opacity: 1 !important;
     pointer-events: auto !important;
+    /* Default collapsed position: translates drawer down so only 54px header is visible */
+    transform: translateY(calc(45vh - 54px)) !important;
   }
 
-  /* Smooth GPU-accelerated slide up */
+  /* GPU-Accelerated slide-up transition when expanded */
   .heatmap-side-panel.mobile-expanded {
     transform: translateY(0) !important;
-  }
-
-  .heatmap-side-panel.panel-closed {
-    transform: translateY(calc(45vh - 54px)) !important;
   }
 }
 
