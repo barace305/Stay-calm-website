@@ -17,44 +17,49 @@ html, body, #root {
 
 /* ─── LEAFLET MAP OVERRIDES ──────────────────────────────────────────────── */
 .heatmap-container .leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.85) !important;
-  color: #333333 !important;
+  background: rgba(6, 13, 24, 0.85) !important;
+  color: rgba(138, 163, 204, 0.7) !important;
   font-size: 8px !important;
   backdrop-filter: blur(4px);
   border: none !important;
 }
 
 .heatmap-container .leaflet-control-attribution a {
-  color: #0A1628 !important;
+  color: rgba(212, 175, 55, 0.7) !important;
 }
 
 /* Position zoom controls cleanly inside map area */
 .heatmap-container .leaflet-control-zoom {
-  border: 1px solid rgba(15, 34, 68, 0.15) !important;
+  border: 1px solid rgba(212, 175, 55, 0.25) !important;
   border-radius: 8px !important;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
   margin-top: 12px !important;
 }
 
 .heatmap-container .leaflet-control-zoom a {
-  background: rgba(255, 255, 255, 0.95) !important;
-  color: #0f2244 !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+  background: rgba(6, 13, 24, 0.95) !important;
+  color: #D4AF37 !important;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.15) !important;
   width: 32px !important;
   height: 32px !important;
   line-height: 32px !important;
   font-size: 16px !important;
+  backdrop-filter: blur(8px);
 }
 
 .heatmap-container .leaflet-control-zoom a:hover {
-  background: #f0f3f9 !important;
-  color: #D4AF37 !important;
+  background: rgba(10, 17, 40, 0.95) !important;
+  color: #EFC94B !important;
 }
 
-/* Make map tiles crisp, clear, and perfectly light */
+/* 
+   PREMIUM SEMI-DARK ROADMAP VISIBILITY
+   Uses the detailed light Voyager tiles, but applies a custom contrast/brightness filter
+   to darken the background while making the roads, highways, and labels pop out clearly.
+*/
 .heatmap-container .leaflet-tile-pane {
-  filter: saturate(1.1) brightness(1.02) contrast(0.98) !important;
+  filter: brightness(0.65) contrast(1.25) saturate(0.95) !important;
 }
 
 /* ─── PULSING LIVE INDICATOR ─────────────────────────────────────────────── */
@@ -77,7 +82,7 @@ html, body, #root {
   flex-shrink: 0;
 }
 
-/* ─── FUTURISTIC NEON RADAR RINGS (Replaces huge blurry clouds) ───────────── */
+/* ─── FUTURISTIC NEON RADAR RINGS ────────────────────────────────────────── */
 .radar-ring {
   filter: drop-shadow(0 0 4px currentColor);
 }
@@ -217,7 +222,7 @@ html, body, #root {
   flex-direction: column;
   overflow: hidden;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-  transition: transform 0.3s ease, height 0.3s ease, bottom 0.3s ease;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .heatmap-side-panel.panel-closed {
@@ -234,7 +239,10 @@ html, body, #root {
   background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.3), transparent);
 }
 
-/* Mobile Bottom Sheet Layout */
+/* 
+   MOBILE BOTTOM SHEET OVERHAUL
+   Uses fixed height & GPU-accelerated translateY transitions for buttery-smooth performance.
+*/
 @media (max-width: 640px) {
   .heatmap-side-panel {
     width: 100% !important;
@@ -245,17 +253,19 @@ html, body, #root {
     border-radius: 16px 16px 0 0 !important;
     border: 1px solid rgba(212, 175, 55, 0.2) !important;
     border-bottom: none !important;
-    height: 54px; /* Collapsed height showing title */
-    transform: none !important;
+    height: 45vh !important; /* Fixed height for translation */
+    transform: translateY(calc(45vh - 54px)) !important; /* Collapsed state showing just the 54px header */
+    opacity: 1 !important;
+    pointer-events: auto !important;
   }
 
+  /* Smooth GPU-accelerated slide up */
   .heatmap-side-panel.mobile-expanded {
-    height: 42vh; /* Expanded height */
+    transform: translateY(0) !important;
   }
 
   .heatmap-side-panel.panel-closed {
-    height: 54px;
-    transform: none;
+    transform: translateY(calc(45vh - 54px)) !important;
   }
 }
 
