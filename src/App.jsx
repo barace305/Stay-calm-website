@@ -4,6 +4,7 @@ import HelpFunnel from './pages/HelpFunnel';
 import Chiropractor from './pages/Chiropractor';
 import Towing from './pages/Towing';
 import BodyShop from './pages/BodyShop';
+import HeatMap from './pages/HeatMap';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/towing" element={<Towing />} />
         <Route path="/body-shop" element={<BodyShop />} />
         <Route path="/bodyshop" element={<BodyShop />} />
+        <Route path="/heatmap" element={<HeatMap />} />
       </Routes>
     </Router>
   );
