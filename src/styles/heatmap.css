@@ -398,3 +398,195 @@ html, body, #root {
 .heatmap-input:focus {
   box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.25);
 }
+
+/* ─── SPATIAL POPUP/TOOLTIP STYLES ───────────────────────────────────────── */
+.radar-spatial-tooltip {
+  background: rgba(6, 13, 24, 0.92) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(212, 175, 55, 0.25) !important;
+  border-radius: 8px !important;
+  padding: 6px 10px !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6) !important;
+  color: #ffffff !important;
+}
+
+.radar-spatial-tooltip::before {
+  border-top-color: rgba(6, 13, 24, 0.92) !important;
+}
+
+.radar-tooltip-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 170px;
+}
+
+.tooltip-marker-type {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+.tooltip-marker-type.high { background-color: #EF4444; box-shadow: 0 0 6px #EF4444; }
+.tooltip-marker-type.medium { background-color: #F97316; box-shadow: 0 0 6px #F97316; }
+.tooltip-marker-type.low { background-color: #F59E0B; box-shadow: 0 0 6px #F59E0B; }
+
+.tooltip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5px;
+}
+
+.tooltip-loc {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.tooltip-desc {
+  font-size: 9.5px;
+  color: #8aa3cc;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.tooltip-time {
+  font-size: 8px;
+  color: #5c7eb5;
+  margin: 0;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+/* Classification Badges */
+.tooltip-classification, .popup-classification-badge {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1.5px 4px;
+  border-radius: 3px;
+  align-self: flex-start;
+  margin-bottom: 2px;
+}
+.tooltip-classification.main-corridor, .popup-classification-badge.main-corridor {
+  background: rgba(212, 175, 55, 0.15) !important;
+  color: #D4AF37 !important;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+}
+.tooltip-classification.residential, .popup-classification-badge.residential {
+  background: rgba(138, 163, 204, 0.1) !important;
+  color: #8AA3CC !important;
+  border: 1px solid rgba(138, 163, 204, 0.2);
+}
+
+/* Route to Accident Buttons */
+.tooltip-route-btn, .popup-route-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none !important;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #060D18 !important;
+  background: linear-gradient(90deg, #D4AF37, #B8891E);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-top: 6px;
+  text-align: center;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+  box-shadow: 0 2px 6px rgba(212, 175, 55, 0.2);
+}
+.tooltip-route-btn:hover, .popup-route-btn:hover {
+  opacity: 0.95;
+  transform: translateY(-0.5px);
+}
+.tooltip-route-btn:active, .popup-route-btn:active {
+  transform: translateY(0.5px);
+}
+
+/* Premium Inactivity Modal Overlay */
+.inactivity-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 13, 24, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.inactivity-modal {
+  width: 90%;
+  max-width: 380px;
+  background: rgba(10, 17, 40, 0.95);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(212, 175, 55, 0.05);
+}
+
+.inactivity-icon-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(212, 175, 55, 0.1);
+  color: #D4AF37;
+  margin-bottom: 16px;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.inactivity-title {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.inactivity-desc {
+  color: #8AA3CC;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 20px 0;
+}
+
+.inactivity-btn {
+  width: 100%;
+  background: linear-gradient(90deg, #D4AF37, #B8891E);
+  color: #060D18;
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.2);
+}
+
+.inactivity-btn:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.inactivity-btn:active {
+  transform: translateY(1px);
+}
+

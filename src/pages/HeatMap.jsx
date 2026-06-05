@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   generateDemoIncidents,
+  fetchLiveIncidents,
   getActiveIncidents,
   getSeverityIntensity,
   getAgeDecay,
@@ -379,15 +380,87 @@ function MapDashboard({ onLogout }) {
   const mapInstanceRef = useRef(null);
   const layerGroupRef = useRef(null);
   const headerRef = useRef(null);
+  const markerCacheRef = useRef({}); // maps inc.id -> { outer, inner, core, marker }
   
   const [activeIncidents, setActiveIncidents] = useState([]);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 640);
   const [mobileExpanded, setMobileExpanded] = useState(false);
+  
+  // Inactivity and Wake Lock states
+  const [isIdle, setIsIdle] = useState(false);
+  const lastInteractionRef = useRef(Date.now());
+  const idleCheckIntervalRef = useRef(null);
+
+  const resetIdleTimer = useCallback(() => {
+    lastInteractionRef.current = Date.now();
+    if (isIdle) {
+      setIsIdle(false);
+    }
+  }, [isIdle]);
+
+  // Reset idle timer on user action
+  useEffect(() => {
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
+    const handler = () => resetIdleTimer();
+    events.forEach(e => window.addEventListener(e, handler, { passive: true }));
+    
+    idleCheckIntervalRef.current = setInterval(() => {
+      if (Date.now() - lastInteractionRef.current >= 3600000) { // 60 minutes
+        setIsIdle(true);
+      }
+    }, 10000); // Check every 10 seconds
+    
+    return () => {
+      events.forEach(e => window.removeEventListener(e, handler));
+      if (idleCheckIntervalRef.current) {
+        clearInterval(idleCheckIntervalRef.current);
+      }
+    };
+  }, [resetIdleTimer]);
+
+  // Screen Wake Lock Effect
+  useEffect(() => {
+    if (isIdle) return;
+    
+    let wakeLock = null;
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (err) {
+        console.warn('Wake Lock request failed:', err);
+      }
+    }
+    requestWakeLock();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !isIdle) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (wakeLock) {
+        wakeLock.release().then(() => {
+          wakeLock = null;
+        });
+      }
+    };
+  }, [isIdle]);
+
+  // Keep a fresh reference to active incidents for map listeners to reference without closures
+  const activeIncidentsRef = useRef([]);
+  useEffect(() => {
+    activeIncidentsRef.current = activeIncidents;
+  }, [activeIncidents]);
 
   // Load and refresh active incident lists
-  const refreshIncidents = useCallback(() => {
-    const allIncidents = generateDemoIncidents();
+  const refreshIncidents = useCallback(async () => {
+    const allIncidents = await fetchLiveIncidents();
     const active = getActiveIncidents(allIncidents);
     setActiveIncidents(active);
     return active;
@@ -401,15 +474,10 @@ function MapDashboard({ onLogout }) {
         duration: 0.8,
       });
 
-      if (layerGroupRef.current) {
-        layerGroupRef.current.eachLayer((layer) => {
-          if (layer instanceof window.L.CircleMarker) {
-            const latLng = layer.getLatLng();
-            if (latLng.lat === inc.latitude && latLng.lng === inc.longitude) {
-              layer.openPopup();
-            }
-          }
-        });
+      // Automatically open tooltip/popup if layer exists in cache
+      const cached = markerCacheRef.current[inc.id];
+      if (cached && cached.marker) {
+        cached.marker.openPopup();
       }
 
       if (isMobile) {
@@ -418,75 +486,186 @@ function MapDashboard({ onLogout }) {
     }
   };
 
-  // Re-draw futuristic radar ring targets and markers
+  // Re-draw futuristic radar ring targets and markers using differential cache
   const updateHeatLayer = useCallback((map, activeList) => {
     const L = window.L;
     if (!L) return;
 
     if (!layerGroupRef.current) {
       layerGroupRef.current = L.layerGroup().addTo(map);
-    } else {
-      layerGroupRef.current.clearLayers();
     }
 
     const group = layerGroupRef.current;
+    const cache = markerCacheRef.current;
 
-    activeList.forEach((inc) => {
+    // 1. Calculate map viewport boundaries with an extended buffer (approx 0.05 lat/lng grid)
+    const bounds = map.getBounds();
+    const pad = 0.05;
+    const extendedBounds = L.latLngBounds(
+      [bounds.getSouth() - pad, bounds.getWest() - pad],
+      [bounds.getNorth() + pad, bounds.getEast() + pad]
+    );
+
+    // 2. Classify active and visible incident ids
+    const activeIds = new Set(activeList.map(inc => inc.id));
+    const visibleIncidents = activeList.filter(inc => extendedBounds.contains([inc.latitude, inc.longitude]));
+    const visibleIds = new Set(visibleIncidents.map(inc => inc.id));
+
+    // 3. Remove layers that are either expired or scrolled out of visible range
+    Object.keys(cache).forEach((id) => {
+      if (!activeIds.has(id) || !visibleIds.has(id)) {
+        const layers = cache[id];
+        if (layers) {
+          if (layers.outer) group.removeLayer(layers.outer);
+          if (layers.inner) group.removeLayer(layers.inner);
+          if (layers.core) group.removeLayer(layers.core);
+          if (layers.marker) group.removeLayer(layers.marker);
+        }
+        delete cache[id];
+      }
+    });
+
+    // 4. Add or update currently visible incidents
+    visibleIncidents.forEach((inc) => {
       const color = inc.severity === 'High' ? '#EF4444' : inc.severity === 'Medium' ? '#F97316' : '#F59E0B';
       const ageMultiplier = getAgeDecay(inc.createdAt);
 
-      const baseRadius = inc.severity === 'High' ? 380 : inc.severity === 'Medium' ? 240 : 140;
-      
-      // 1. Radar Targeting Ring (Sharp neon border, soft internal glow)
-      L.circle([inc.latitude, inc.longitude], {
-        radius: baseRadius,
-        color: color,
-        weight: 2,
-        opacity: 0.9 * ageMultiplier,
-        fillColor: color,
-        fillOpacity: 0.12 * ageMultiplier,
-        className: 'radar-ring',
-        interactive: false,
-      }).addTo(group);
+      if (!cache[inc.id]) {
+        // Create vector layers
+        const baseRadius = inc.severity === 'High' ? 380 : inc.severity === 'Medium' ? 240 : 140;
+        
+        // Target outer ring
+        const outer = L.circle([inc.latitude, inc.longitude], {
+          radius: baseRadius,
+          color: color,
+          weight: 2,
+          opacity: 0.9 * ageMultiplier,
+          fillColor: color,
+          fillOpacity: 0.12 * ageMultiplier,
+          className: 'radar-ring',
+          interactive: false,
+        }).addTo(group);
 
-      // 2. Pulse target expansion ring
-      L.circle([inc.latitude, inc.longitude], {
-        radius: baseRadius * 1.5,
-        color: color,
-        weight: 1,
-        fill: false,
-        className: 'radar-ring-pulse',
-        interactive: false,
-      }).addTo(group);
+        // Target pulse ring
+        const inner = L.circle([inc.latitude, inc.longitude], {
+          radius: baseRadius * 1.5,
+          color: color,
+          weight: 1,
+          fill: false,
+          className: 'radar-ring-pulse',
+          interactive: false,
+        }).addTo(group);
 
-      // 3. Central digital point marker
-      const marker = L.circleMarker([inc.latitude, inc.longitude], {
-        radius: 6,
-        fillColor: '#FFFFFF',
-        color: color,
-        weight: 2,
-        fillOpacity: 1.0,
-        className: 'radar-dot',
-      }).addTo(group);
+        // Core target focus
+        const core = L.circle([inc.latitude, inc.longitude], {
+          radius: inc.severity === 'High' ? 120 : inc.severity === 'Medium' ? 80 : 50,
+          color: color,
+          weight: 1,
+          fillColor: color,
+          fillOpacity: 0.25 * ageMultiplier,
+          className: 'radar-ring-core',
+          interactive: false,
+        }).addTo(group);
 
-      const popupContent = `
-        <div class="heatmap-popup-card">
-          <div class="popup-header">
-            <span class="popup-title">${inc.type}</span>
-            <span class="popup-badge ${inc.severity.toLowerCase()}">${inc.severity}</span>
+        // Pulse dot marker
+        const marker = L.circleMarker([inc.latitude, inc.longitude], {
+          radius: 6,
+          fillColor: '#FFFFFF',
+          color: color,
+          weight: 2,
+          fillOpacity: 1.0,
+          className: 'radar-dot',
+        }).addTo(group);
+
+        // Custom details card bound as a tooltip
+        const classificationClass = inc.classification ? inc.classification.toLowerCase().replace(' ', '-') : 'residential';
+        const tooltipContent = `
+          <div class="radar-tooltip-card">
+            <span class="tooltip-marker-type ${inc.severity.toLowerCase()}"></span>
+            <div class="tooltip-body">
+              <div class="tooltip-classification ${classificationClass}">
+                ${inc.classification || 'Residential'}
+              </div>
+              <p class="tooltip-loc">${inc.location}</p>
+              <p class="tooltip-desc">${inc.type}</p>
+              <p class="tooltip-time">${formatRelativeTime(inc.createdAt)}</p>
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${inc.latitude},${inc.longitude}" target="_blank" rel="noopener noreferrer" class="tooltip-route-btn">
+                Route to Accident
+              </a>
+            </div>
           </div>
-          <p class="popup-location">${inc.location}</p>
-          <div class="popup-meta">
-            <span>Reported ${formatClockTime(inc.createdAt)} (${formatRelativeTime(inc.createdAt)})</span>
-          </div>
-        </div>
-      `;
+        `;
 
-      marker.bindPopup(popupContent, {
-        className: 'heatmap-leaflet-popup',
-        closeButton: false,
-        offset: [0, -4],
-      });
+        marker.bindTooltip(tooltipContent, {
+          direction: 'top',
+          offset: [0, -8],
+          sticky: false,
+          opacity: 0.98,
+          interactive: true,
+          className: 'radar-spatial-tooltip'
+        });
+
+        // Detail popup for click/selection
+        const popupContent = `
+          <div class="heatmap-popup-card">
+            <div class="popup-header">
+              <span class="popup-title">${inc.type}</span>
+              <span class="popup-badge ${inc.severity.toLowerCase()}">${inc.severity}</span>
+            </div>
+            <div class="popup-classification-badge ${classificationClass}">
+              ${inc.classification || 'Residential'}
+            </div>
+            <p class="popup-location">${inc.location}</p>
+            <div class="popup-meta">
+              <span>Reported ${formatClockTime(inc.createdAt)} (${formatRelativeTime(inc.createdAt)})</span>
+            </div>
+            <a href="https://www.google.com/maps/dir/?api=1&destination=${inc.latitude},${inc.longitude}" target="_blank" rel="noopener noreferrer" class="popup-route-btn">
+              Route to Accident
+            </a>
+          </div>
+        `;
+
+        marker.bindPopup(popupContent, {
+          className: 'heatmap-leaflet-popup',
+          closeButton: false,
+          offset: [0, -4],
+        });
+
+        // Touch-hold gesture hooks (200ms preview hold) for mobile
+        let touchTimer = null;
+        marker.on('touchstart', (e) => {
+          L.DomEvent.stopPropagation(e);
+          touchTimer = setTimeout(() => {
+            marker.openTooltip();
+          }, 200);
+        });
+
+        const dismissTouchTooltip = () => {
+          if (touchTimer) {
+            clearTimeout(touchTimer);
+            touchTimer = null;
+          }
+          marker.closeTooltip();
+        };
+
+        marker.on('touchend', dismissTouchTooltip);
+        marker.on('touchmove', dismissTouchTooltip);
+        marker.on('touchcancel', dismissTouchTooltip);
+
+        // Save reference pointers
+        cache[inc.id] = { outer, inner, core, marker };
+      } else {
+        // Update styling properties
+        const layers = cache[inc.id];
+        if (layers) {
+          if (layers.outer) {
+            layers.outer.setStyle({ opacity: 0.9 * ageMultiplier, fillOpacity: 0.12 * ageMultiplier });
+          }
+          if (layers.core) {
+            layers.core.setStyle({ fillOpacity: 0.25 * ageMultiplier });
+          }
+        }
+      }
     });
   }, []);
 
@@ -544,8 +723,25 @@ function MapDashboard({ onLogout }) {
     map.zoomControl.setPosition('topright');
     mapInstanceRef.current = map;
 
-    const active = refreshIncidents();
-    updateHeatLayer(map, active);
+    refreshIncidents().then((active) => {
+      if (active) updateHeatLayer(map, active);
+    });
+
+    // Bind map movement event listeners to trigger bounding-box spatial pruning
+    const handleMapMovement = () => {
+      updateHeatLayer(map, activeIncidentsRef.current);
+    };
+
+    map.on('moveend', handleMapMovement);
+    map.on('zoomend', handleMapMovement);
+
+    // Also bind Leaflet map events to reset idle timer on pan/zoom
+    const handleMapInteraction = () => {
+      resetIdleTimer();
+    };
+    map.on('dragstart', handleMapInteraction);
+    map.on('zoomstart', handleMapInteraction);
+    map.on('click', handleMapInteraction);
 
     const handleResize = () => {
       const mobile = window.innerWidth <= 640;
@@ -560,22 +756,40 @@ function MapDashboard({ onLogout }) {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      map.off('moveend', handleMapMovement);
+      map.off('zoomend', handleMapMovement);
+      map.off('dragstart', handleMapInteraction);
+      map.off('zoomstart', handleMapInteraction);
+      map.off('click', handleMapInteraction);
       map.remove();
       mapInstanceRef.current = null;
       layerGroupRef.current = null;
+      markerCacheRef.current = {};
     };
-  }, [refreshIncidents, updateHeatLayer]);
+  }, [refreshIncidents, updateHeatLayer, resetIdleTimer]);
 
-  // Periodic Auto-refresh
+  // Periodic Auto-refresh (paused when idle)
   useEffect(() => {
+    if (isIdle) return;
+
     const interval = setInterval(() => {
-      const active = refreshIncidents();
-      if (mapInstanceRef.current) {
-        updateHeatLayer(mapInstanceRef.current, active);
-      }
+      refreshIncidents().then((active) => {
+        if (mapInstanceRef.current && active) {
+          updateHeatLayer(mapInstanceRef.current, active);
+        }
+      });
     }, REFRESH_INTERVAL);
     return () => clearInterval(interval);
-  }, [refreshIncidents, updateHeatLayer]);
+  }, [refreshIncidents, updateHeatLayer, isIdle]);
+
+  const handleResume = () => {
+    resetIdleTimer();
+    refreshIncidents().then((active) => {
+      if (mapInstanceRef.current && active) {
+        updateHeatLayer(mapInstanceRef.current, active);
+      }
+    });
+  };
 
   const getIncidentIconPath = (type) => {
     switch (type) {
@@ -711,6 +925,26 @@ function MapDashboard({ onLogout }) {
           </div>
         </div>
       </div>
+
+      {/* Inactivity Timeout Modal Overlay */}
+      {isIdle && (
+        <div className="inactivity-modal-overlay">
+          <div className="inactivity-modal">
+            <div className="inactivity-icon-container">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h3 className="inactivity-title">Still Monitoring?</h3>
+            <p className="inactivity-desc">
+              Auto-refresh has been paused to conserve background data and battery life.
+            </p>
+            <button onClick={handleResume} className="inactivity-btn">
+              Resume Active Feeds
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

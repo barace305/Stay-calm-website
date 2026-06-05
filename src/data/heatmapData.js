@@ -723,18 +723,239 @@ const incidentTemplates = [
 // ─── AUTO-SCRUB THRESHOLD ───────────────────────────────────────────────────
 const SCRUB_THRESHOLD_MINUTES = 90;
 
+// ─── DYNAMIC GEORGIA INCIDENT GENERATION (40 - 150 VOLUME SIMULATION) ────────
+const cities = [
+  'Atlanta', 'Sandy Springs', 'Roswell', 'Alpharetta', 'Marietta',
+  'Smyrna', 'Norcross', 'Duluth', 'Chamblee', 'Doraville',
+  'Decatur', 'Brookhaven', 'Dunwoody', 'Peachtree Corners', 'Lilburn',
+  'Stone Mountain', 'Lawrenceville', 'College Park', 'East Point', 'Morrow'
+];
+
+const streetTemplates = [
+  { name: 'I-85 N near Exit {exit}', type: 'highway' },
+  { name: 'I-85 S near Exit {exit}', type: 'highway' },
+  { name: 'I-75 N near Exit {exit}', type: 'highway' },
+  { name: 'I-75 S near Exit {exit}', type: 'highway' },
+  { name: 'I-285 E near Exit {exit}', type: 'highway' },
+  { name: 'I-285 W near Exit {exit}', type: 'highway' },
+  { name: 'GA-400 N near Exit {exit}', type: 'highway' },
+  { name: 'GA-400 S near Exit {exit}', type: 'highway' },
+  { name: 'I-20 E near Exit {exit}', type: 'highway' },
+  { name: 'I-20 W near Exit {exit}', type: 'highway' },
+  { name: 'Peachtree Rd at {street} Rd', type: 'local' },
+  { name: 'Peachtree St at {street} Ave', type: 'local' },
+  { name: 'Piedmont Rd near {street} Rd', type: 'local' },
+  { name: 'Cobb Pkwy near {street} Dr', type: 'local' },
+  { name: 'Roswell Rd at {street} Rd', type: 'local' },
+  { name: 'Buford Hwy near {street} Rd', type: 'local' },
+];
+
+const sideStreets = [
+  'Piedmont', 'Lenox', 'Pharr', 'Hammond', 'Abercorn', 'Abernathy',
+  'Windward', 'Haynes Bridge', 'Delk', 'Windy Hill', 'Barrett',
+  'Chamblee Dunwoody', 'Shallowford', 'Briarcliff', 'Clairmont',
+  'Pleasant Hill', 'Jimmy Carter', 'Indian Trail', 'Winters Chapel',
+  'Sugarloaf', 'Satellite', 'Lawrenceville', 'Moreland', 'Memorial', 'MLK Jr'
+];
+
+const types = ['Accident', 'Multi-Vehicle Collision', 'Disabled Vehicle', 'Heavy Delay'];
+const severities = ['Low', 'Medium', 'High'];
+
+let liveIncidentPool = null;
+let lastRefreshTime = null;
+let targetActiveCount = 120; // Default target between 40 and 150
+
+export function getIncidentClassification(locationText) {
+  if (!locationText) return 'Residential';
+  const mainCorridorKeywords = ["I-85", "I-285", "SR-", "Hwy", "Blvd", "Pkwy", "I-75", "I-20", "GA-400"];
+  const containsKeyword = mainCorridorKeywords.some(keyword => 
+    locationText.toLowerCase().includes(keyword.toLowerCase())
+  );
+  return containsKeyword ? 'Main Corridor' : 'Residential';
+}
+
+const snapCache = new Map();
+
+export async function snapCoordsToRoad(lat, lng) {
+  const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+  if (snapCache.has(cacheKey)) {
+    return snapCache.get(cacheKey);
+  }
+  
+  try {
+    const url = `https://router.project-osrm.org/nearest/v1/driving/${lng},${lat}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("OSRM snap failed");
+    const data = await response.json();
+    if (data.code === 'Ok' && data.waypoints && data.waypoints.length > 0) {
+      const snappedCoords = [data.waypoints[0].location[1], data.waypoints[0].location[0]]; // [lat, lng]
+      snapCache.set(cacheKey, snappedCoords);
+      return snappedCoords;
+    }
+  } catch (error) {
+    console.warn("Road snap failed, using raw coords:", error);
+  }
+  
+  return [lat, lng];
+}
+
+function createRandomGeorgiaIncident(idNum, minutesAgo) {
+  const type = types[Math.floor(Math.random() * types.length)];
+  const severity = severities[Math.floor(Math.random() * severities.length)];
+  
+  const streetTemp = streetTemplates[Math.floor(Math.random() * streetTemplates.length)];
+  let location = '';
+  if (streetTemp.type === 'highway') {
+    const exit = Math.floor(Math.random() * 100) + 10;
+    location = streetTemp.name.replace('{exit}', exit);
+  } else {
+    const street = sideStreets[Math.floor(Math.random() * sideStreets.length)];
+    location = streetTemp.name.replace('{street}', street);
+  }
+  
+  const city = cities[Math.floor(Math.random() * cities.length)];
+  const classification = getIncidentClassification(location);
+  
+  // Coordinates targeted within stay-calm's map bounds
+  // Lat: 33.56 to 34.14, Lng: -84.64 to -84.06
+  const latitude = Math.random() * (34.14 - 33.56) + 33.56;
+  const longitude = Math.random() * (-84.06 - (-84.64)) + (-84.64);
+  
+  return {
+    id: `inc-dyn-${idNum}`,
+    type,
+    location,
+    city,
+    latitude,
+    longitude,
+    severity,
+    minutesAgo,
+    source: 'api',
+    status: 'Active',
+    classification
+  };
+}
+
+function initializeIncidentPool() {
+  const now = Date.now();
+  lastRefreshTime = now;
+  
+  // Choose target active count dynamically between 40 and 150
+  targetActiveCount = Math.floor(Math.random() * (150 - 40 + 1)) + 40;
+  
+  // Populate from templates (skipping expired ones) and add classification
+  const basePool = incidentTemplates
+    .filter(t => t.minutesAgo < SCRUB_THRESHOLD_MINUTES)
+    .map(t => ({ 
+      ...t, 
+      classification: getIncidentClassification(t.location) 
+    }));
+    
+  let nextIdNum = 100;
+  while (basePool.length < targetActiveCount) {
+    basePool.push(createRandomGeorgiaIncident(nextIdNum++, Math.floor(Math.random() * 85)));
+  }
+  
+  liveIncidentPool = basePool;
+}
+
 // ─── GENERATE DEMO INCIDENTS ────────────────────────────────────────────────
 // Converts minutesAgo into real ISO timestamps relative to the current time.
-// This ensures the demo always works regardless of when the page is loaded.
+// Maintains a stable pool size of 40-150 active incidents and ages them naturally.
 export function generateDemoIncidents() {
   const now = Date.now();
-  return incidentTemplates.map((template) => {
-    const { minutesAgo, ...incident } = template;
+  
+  if (!liveIncidentPool) {
+    initializeIncidentPool();
+  } else {
+    const elapsedMinutes = Math.max(1, Math.floor((now - lastRefreshTime) / 60000));
+    if (elapsedMinutes >= 1) {
+      lastRefreshTime = now;
+      
+      // Age all existing incidents in pool
+      liveIncidentPool.forEach(inc => {
+        inc.minutesAgo += elapsedMinutes;
+      });
+      
+      // Filter out aged-out incidents
+      liveIncidentPool = liveIncidentPool.filter(inc => inc.minutesAgo < SCRUB_THRESHOLD_MINUTES);
+      
+      // Refill to keep count at targetActiveCount
+      let nextIdNum = Math.floor(Math.random() * 1000) + 500;
+      while (liveIncidentPool.length < targetActiveCount) {
+        liveIncidentPool.push(createRandomGeorgiaIncident(nextIdNum++, Math.floor(Math.random() * 5)));
+      }
+    }
+  }
+  
+  return liveIncidentPool.map((inc) => {
     return {
-      ...incident,
-      createdAt: new Date(now - minutesAgo * 60 * 1000).toISOString(),
+      ...inc,
+      createdAt: new Date(now - inc.minutesAgo * 60 * 1000).toISOString(),
     };
   });
+}
+
+// ─── FETCH LIVE INCIDENTS FROM AIRTABLE ──────────────────────────────────────
+// Main connector that checks for environmental variables and snaps coordinates.
+export async function fetchLiveIncidents() {
+  const baseId = import.meta.env.VITE_AIRTABLE_BASE_ID;
+  const tableName = import.meta.env.VITE_AIRTABLE_TABLE_NAME;
+  const accessToken = import.meta.env.VITE_AIRTABLE_ACCESS_TOKEN;
+
+  if (!baseId || !accessToken || accessToken === 'your_airtable_token_here') {
+    console.info("Airtable config missing or set to placeholders. Rendering demo pool.");
+    return generateDemoIncidents();
+  }
+
+  try {
+    const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}?filterByFormula=status%3D%27Active%27`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Airtable API returned status code ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // Process and snap raw coordinate sets in parallel
+    const parsedRecords = await Promise.all((data.records || []).map(async (record) => {
+      const fields = record.fields;
+      
+      // Handle fallback default coordinates (Atlanta core) if null/missing
+      const rawLat = parseFloat(fields.Latitude || fields.latitude || fields.Lat || 33.785);
+      const rawLng = parseFloat(fields.Longitude || fields.longitude || fields.Lng || fields.Long || -84.385);
+      
+      // Snap pin to road via OSM OSRM API
+      const [lat, lng] = await snapCoordsToRoad(rawLat, rawLng);
+      
+      const locText = fields.Location || fields.location || fields.Address || 'Unknown Location';
+      const classification = getIncidentClassification(locText);
+      
+      return {
+        id: record.id,
+        type: fields.Type || fields.type || fields.IncidentType || 'Accident',
+        location: locText,
+        city: fields.City || fields.city || 'Georgia',
+        latitude: lat,
+        longitude: lng,
+        severity: fields.Severity || fields.severity || 'Medium',
+        createdAt: fields.CreatedAt || fields.createdAt || record.createdTime || new Date().toISOString(),
+        source: 'airtable',
+        status: fields.Status || fields.status || 'Active',
+        classification: classification
+      };
+    }));
+
+    return parsedRecords;
+  } catch (error) {
+    console.error("Airtable integration failed. Reverting to local dynamic pool:", error);
+    return generateDemoIncidents();
+  }
 }
 
 // ─── GET ACTIVE INCIDENTS ───────────────────────────────────────────────────
