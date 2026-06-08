@@ -909,7 +909,8 @@ export async function fetchLiveIncidents() {
   }
 
   try {
-    const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}?filterByFormula=status%3D%27Active%27`;
+    // Query without status formula since Airtable schema lacks a status column
+    const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`;
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${accessToken}`
@@ -926,19 +927,33 @@ export async function fetchLiveIncidents() {
     const parsedRecords = await Promise.all((data.records || []).map(async (record) => {
       const fields = record.fields;
       
-      // Handle fallback default coordinates (Atlanta core) if null/missing
-      const rawLat = parseFloat(fields.Latitude || fields.latitude || fields.Lat || 33.785);
-      const rawLng = parseFloat(fields.Longitude || fields.longitude || fields.Lng || fields.Long || -84.385);
+      // Parse coordinates from "GPS Coordinates" column (comma-separated string e.g. "33.7488, -84.3877")
+      let rawLat = 33.785;
+      let rawLng = -84.385;
+      if (fields["GPS Coordinates"]) {
+        const coords = fields["GPS Coordinates"].split(",");
+        if (coords.length === 2) {
+          rawLat = parseFloat(coords[0].trim()) || 33.785;
+          rawLng = parseFloat(coords[1].trim()) || -84.385;
+        }
+      } else {
+        rawLat = parseFloat(fields.Latitude || fields.latitude || fields.Lat || 33.785);
+        rawLng = parseFloat(fields.Longitude || fields.longitude || fields.Lng || fields.Long || -84.385);
+      }
       
       // Snap pin to road via OSM OSRM API
       const [lat, lng] = await snapCoordsToRoad(rawLat, rawLng);
       
-      const locText = fields.Location || fields.location || fields.Address || 'Unknown Location';
+      const descText = fields.Description || fields.description || '';
+      const locText = fields.Location || fields.location || fields.Address || descText || 'Unknown Location';
       const classification = getIncidentClassification(locText);
       
+      // Map Accident ID or use Airtable record ID
+      const accidentId = fields["Accident ID"] ? String(fields["Accident ID"]) : record.id;
+      
       return {
-        id: record.id,
-        type: fields.Type || fields.type || fields.IncidentType || 'Accident',
+        id: accidentId,
+        type: fields.Type || fields.type || fields.IncidentType || descText || 'Accident',
         location: locText,
         city: fields.City || fields.city || 'Georgia',
         latitude: lat,
@@ -958,15 +973,16 @@ export async function fetchLiveIncidents() {
   }
 }
 
-// ─── GET ACTIVE INCIDENTS ───────────────────────────────────────────────────
-// Filters incidents to only those created within the last 90 minutes.
-// This is the primary function the UI calls to populate the map and list.
 export function getActiveIncidents(incidents) {
   const now = Date.now();
   const thresholdMs = SCRUB_THRESHOLD_MINUTES * 60 * 1000;
 
   return incidents.filter((incident) => {
     const age = now - new Date(incident.createdAt).getTime();
+    if (incident.source === 'airtable') {
+      // Allow live records up to 24 hours old so manually entered ones or long-running active incidents show
+      return age < 24 * 60 * 60 * 1000 && incident.status === 'Active';
+    }
     return age < thresholdMs && incident.status === 'Active';
   });
 }
