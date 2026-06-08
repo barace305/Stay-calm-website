@@ -840,8 +840,8 @@ function initializeIncidentPool() {
   const now = Date.now();
   lastRefreshTime = now;
   
-  // Choose target active count dynamically between 40 and 150
-  targetActiveCount = Math.floor(Math.random() * (150 - 40 + 1)) + 40;
+  // Choose target active count dynamically between 50 and 140
+  targetActiveCount = Math.floor(Math.random() * (140 - 50 + 1)) + 50;
   
   // Populate from templates (skipping expired ones) and add classification
   const basePool = incidentTemplates
@@ -896,9 +896,16 @@ export function generateDemoIncidents() {
   });
 }
 
+// Toggle to enable/disable live Airtable feed (true = mock data, false = live Airtable)
+export const USE_MOCK_DATA = true;
+
 // ─── FETCH LIVE INCIDENTS FROM AIRTABLE ──────────────────────────────────────
 // Main connector that checks for environmental variables and snaps coordinates.
 export async function fetchLiveIncidents() {
+  if (USE_MOCK_DATA) {
+    return generateDemoIncidents();
+  }
+
   const baseId = import.meta.env.VITE_AIRTABLE_BASE_ID;
   const tableName = import.meta.env.VITE_AIRTABLE_TABLE_NAME;
   const accessToken = import.meta.env.VITE_AIRTABLE_ACCESS_TOKEN;
