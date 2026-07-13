@@ -804,7 +804,7 @@ function createRandomGeorgiaIncident(idNum, minutesAgo) {
   const severity = severities[Math.floor(Math.random() * severities.length)];
   
   const streetTemp = streetTemplates[Math.floor(Math.random() * streetTemplates.length)];
-  let location = '';
+  let location;
   if (streetTemp.type === 'highway') {
     const exit = Math.floor(Math.random() * 100) + 10;
     location = streetTemp.name.replace('{exit}', exit);
@@ -896,88 +896,98 @@ export function generateDemoIncidents() {
   });
 }
 
-// Toggle to enable/disable live Airtable feed (true = mock data, false = live Airtable)
-export const USE_MOCK_DATA = true;
+// Browser-safe live feed configuration. Airtable credentials must stay server-side.
+const DEFAULT_LIVE_INCIDENT_ENDPOINT = '/api/heatmap/incidents';
+const VALID_SEVERITIES = new Set(['Low', 'Medium', 'High']);
+
+export const AIRTABLE_INCIDENT_FIELDS = [
+  'Incident ID',
+  'Event type',
+  'Subtype',
+  'Description',
+  'Roadway or location',
+  'Latitude',
+  'Longitude',
+  'Reported time',
+];
 
 // ─── FETCH LIVE INCIDENTS FROM AIRTABLE ──────────────────────────────────────
-// Main connector that checks for environmental variables and snaps coordinates.
-export async function fetchLiveIncidents() {
-  if (USE_MOCK_DATA) {
-    return generateDemoIncidents();
-  }
-
-  const baseId = import.meta.env.VITE_AIRTABLE_BASE_ID;
-  const tableName = import.meta.env.VITE_AIRTABLE_TABLE_NAME;
-  const accessToken = import.meta.env.VITE_AIRTABLE_ACCESS_TOKEN;
-
-  if (!baseId || !accessToken || accessToken === 'your_airtable_token_here') {
-    console.info("Airtable config missing or set to placeholders. Rendering demo pool.");
-    return generateDemoIncidents();
-  }
-
-  try {
-    // Query without status formula since Airtable schema lacks a status column
-    const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`;
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Airtable API returned status code ${response.status}`);
+// Normalizes Airtable/Make.com incident payloads into the map's internal model.
+function readIncidentField(fields, names, fallback = '') {
+  for (const name of names) {
+    const value = fields?.[name];
+    if (value !== undefined && value !== null && value !== '') {
+      return value;
     }
-
-    const data = await response.json();
-    
-    // Process and snap raw coordinate sets in parallel
-    const parsedRecords = await Promise.all((data.records || []).map(async (record) => {
-      const fields = record.fields;
-      
-      // Parse coordinates from "GPS Coordinates" column (comma-separated string e.g. "33.7488, -84.3877")
-      let rawLat = 33.785;
-      let rawLng = -84.385;
-      if (fields["GPS Coordinates"]) {
-        const coords = fields["GPS Coordinates"].split(",");
-        if (coords.length === 2) {
-          rawLat = parseFloat(coords[0].trim()) || 33.785;
-          rawLng = parseFloat(coords[1].trim()) || -84.385;
-        }
-      } else {
-        rawLat = parseFloat(fields.Latitude || fields.latitude || fields.Lat || 33.785);
-        rawLng = parseFloat(fields.Longitude || fields.longitude || fields.Lng || fields.Long || -84.385);
-      }
-      
-      // Snap pin to road via OSM OSRM API
-      const [lat, lng] = await snapCoordsToRoad(rawLat, rawLng);
-      
-      const descText = fields.Description || fields.description || '';
-      const locText = fields.Location || fields.location || fields.Address || descText || 'Unknown Location';
-      const classification = getIncidentClassification(locText);
-      
-      // Map Accident ID or use Airtable record ID
-      const accidentId = fields["Accident ID"] ? String(fields["Accident ID"]) : record.id;
-      
-      return {
-        id: accidentId,
-        type: fields.Type || fields.type || fields.IncidentType || descText || 'Accident',
-        location: locText,
-        city: fields.City || fields.city || 'Georgia',
-        latitude: lat,
-        longitude: lng,
-        severity: fields.Severity || fields.severity || 'Medium',
-        createdAt: fields.CreatedAt || fields.createdAt || record.createdTime || new Date().toISOString(),
-        source: 'airtable',
-        status: fields.Status || fields.status || 'Active',
-        classification: classification
-      };
-    }));
-
-    return parsedRecords;
-  } catch (error) {
-    console.error("Airtable integration failed. Reverting to local dynamic pool:", error);
-    return generateDemoIncidents();
   }
+  return fallback;
+}
+
+function normalizeSeverity(value) {
+  const raw = String(value || 'Medium').trim().toLowerCase();
+  const severity = raw.charAt(0).toUpperCase() + raw.slice(1);
+  return VALID_SEVERITIES.has(severity) ? severity : 'Medium';
+}
+
+function normalizeLiveIncident(record) {
+  const fields = record?.fields || record || {};
+  const id = String(readIncidentField(fields, ['Incident ID', 'IncidentID', 'incident_id', 'id'], record?.id || ''));
+  const eventType = String(readIncidentField(fields, ['Event type', 'Event Type', 'Type', 'type'], 'Accident'));
+  const subtype = String(readIncidentField(fields, ['Subtype', 'Sub Type', 'subtype'], ''));
+  const description = String(readIncidentField(fields, ['Description', 'description'], ''));
+  const location = String(
+    readIncidentField(fields, ['Roadway or location', 'Roadway', 'Location', 'location', 'Address'], description || 'Unknown Location')
+  );
+  const latitude = Number(readIncidentField(fields, ['Latitude', 'latitude', 'Lat', 'lat']));
+  const longitude = Number(readIncidentField(fields, ['Longitude', 'longitude', 'Lng', 'lng', 'Long']));
+  const reportedTime = readIncidentField(
+    fields,
+    ['Reported time', 'Reported Time', 'ReportedTime', 'reported_time', 'CreatedAt', 'createdAt'],
+    record?.createdTime || ''
+  );
+
+  if (!id || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !reportedTime) {
+    return null;
+  }
+
+  const reportedDate = new Date(reportedTime);
+  if (Number.isNaN(reportedDate.getTime())) {
+    return null;
+  }
+
+  return {
+    id,
+    type: subtype ? `${eventType} - ${subtype}` : eventType,
+    subtype,
+    description,
+    location,
+    city: String(readIncidentField(fields, ['City', 'city'], 'Georgia')),
+    latitude,
+    longitude,
+    severity: normalizeSeverity(readIncidentField(fields, ['Severity', 'severity'], 'Medium')),
+    createdAt: reportedDate.toISOString(),
+    source: String(readIncidentField(fields, ['Source', 'source'], 'airtable')),
+    status: String(readIncidentField(fields, ['Status', 'status'], 'Active')),
+    classification: getIncidentClassification(location),
+  };
+}
+
+export async function fetchLiveHeatmapIncidents() {
+  const endpoint = import.meta.env.VITE_HEATMAP_INCIDENTS_ENDPOINT || DEFAULT_LIVE_INCIDENT_ENDPOINT;
+  const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+
+  if (response.status === 404 && endpoint === DEFAULT_LIVE_INCIDENT_ENDPOINT) {
+    return [];
+  }
+
+  if (!response.ok) {
+    throw new Error(`Live incident endpoint returned ${response.status}.`);
+  }
+
+  const payload = await response.json();
+  const records = Array.isArray(payload) ? payload : payload.records || payload.incidents || [];
+
+  return records.map(normalizeLiveIncident).filter(Boolean);
 }
 
 export function getActiveIncidents(incidents) {

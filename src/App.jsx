@@ -17,7 +17,8 @@ export default function App() {
         <Route path="/towing" element={<Towing />} />
         <Route path="/body-shop" element={<BodyShop />} />
         <Route path="/bodyshop" element={<BodyShop />} />
-        <Route path="/heatmap" element={<HeatMap />} />
+        <Route path="/heatmap" element={<HeatMap mode="live" />} />
+        <Route path="/heatmap-demo" element={<HeatMap mode="demo" />} />
         <Route path="/admin" element={<Admin />} />
       </Routes>
     </Router>

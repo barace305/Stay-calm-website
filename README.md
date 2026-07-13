@@ -60,6 +60,35 @@ stay-calm-website/
 └── README.md
 ```
 
+## Heat Map Routes
+
+- `/heatmap-demo` preserves the current sample-data partner heat map experience.
+- `/heatmap` is the live partner heat map shell. It uses the same UI and map design, but it does not invent incidents or expose Airtable secrets.
+
+Set `VITE_HEATMAP_INCIDENTS_ENDPOINT` to a browser-safe JSON endpoint when the live feed is ready. That endpoint should be backed by Make.com, a serverless function, or another server-side bridge that owns the Airtable PAT. Do not put Airtable personal access tokens in `VITE_` variables.
+
+### Live Incident JSON Shape
+
+The live endpoint may return either an array, `{ "records": [...] }`, or `{ "incidents": [...] }`. Airtable-style records with a `fields` object are supported.
+
+Required Airtable fields:
+
+- `Incident ID`
+- `Event type`
+- `Subtype`
+- `Description`
+- `Roadway or location`
+- `Latitude`
+- `Longitude`
+- `Reported time`
+
+Optional fields currently recognized by the map:
+
+- `Severity` (`Low`, `Medium`, or `High`; defaults to `Medium`)
+- `Status` (`Active` records are shown)
+- `City`
+- `Source`
+
 ## License
 
 Private — © 2026 StayCalm.Today

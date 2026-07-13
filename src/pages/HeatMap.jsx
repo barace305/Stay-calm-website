@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   generateDemoIncidents,
-  fetchLiveIncidents,
   getActiveIncidents,
-  getSeverityIntensity,
   getAgeDecay,
   formatRelativeTime,
   formatClockTime,
+  fetchLiveHeatmapIncidents,
 } from '../data/heatmapData';
 import {
   adminDb,
@@ -39,9 +38,36 @@ const MAP_BOUNDS = [
 
 const REFRESH_INTERVAL = 60000;
 
-export default function HeatMap() {
+const HEATMAP_COPY = {
+  demo: {
+    eyebrow: 'Partner Heat Map',
+    status: 'Demo',
+    panelTitle: 'Sample Incidents',
+    empty: 'No active sample incidents',
+    footer: 'Sample data - Metro Atlanta Coverage',
+  },
+  live: {
+    eyebrow: 'Partner Heat Map',
+    status: 'Live',
+    panelTitle: 'Live Incidents',
+    empty: 'No active live incidents',
+    footer: 'Live feed ready - Metro Atlanta Coverage',
+  },
+};
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+export default function HeatMap({ mode = 'live' }) {
+  const isDemo = mode === 'demo';
   const [authenticated, setAuthenticated] = useState(
-    () => sessionStorage.getItem('sc_heatmap_auth') === 'true'
+    () => sessionStorage.getItem(`sc_heatmap_${mode}_auth`) === 'true'
   );
 
   // Lock document body and viewport scrolling to prevent rubber-banding on iOS
@@ -73,21 +99,21 @@ export default function HeatMap() {
 
   return authenticated ? (
     <MapDashboard onLogout={() => {
-      sessionStorage.removeItem('sc_heatmap_auth');
+      sessionStorage.removeItem(`sc_heatmap_${mode}_auth`);
       setAuthenticated(false);
-    }} />
+    }} mode={mode} />
   ) : (
     <GateScreen onAuth={() => {
-      sessionStorage.setItem('sc_heatmap_auth', 'true');
+      sessionStorage.setItem(`sc_heatmap_${mode}_auth`, 'true');
       setAuthenticated(true);
-    }} />
+    }} isDemo={isDemo} />
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AUTH / REGISTRATION / RESET GATE SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
-function GateScreen({ onAuth }) {
+function GateScreen({ onAuth, isDemo }) {
   const [screen, setScreen] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -224,7 +250,9 @@ function GateScreen({ onAuth }) {
         {screen === 'login' && (
           <>
             <h1 className="text-center text-white font-bold text-lg tracking-wide mb-1">PARTNER ACCESS</h1>
-            <p className="text-center text-[#8AA3CC] text-sm mb-6">Sign in to view the live heat map</p>
+            <p className="text-center text-[#8AA3CC] text-sm mb-6">
+              Sign in to view the {isDemo ? 'demo/sample' : 'live'} heat map
+            </p>
           </>
         )}
         {screen === 'signup' && (
@@ -375,7 +403,9 @@ function GateScreen({ onAuth }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // MAP DASHBOARD MODULE
 // ─────────────────────────────────────────────────────────────────────────────
-function MapDashboard({ onLogout }) {
+function MapDashboard({ onLogout, mode }) {
+  const copy = HEATMAP_COPY[mode] || HEATMAP_COPY.live;
+  const isDemo = mode === 'demo';
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const layerGroupRef = useRef(null);
@@ -383,13 +413,18 @@ function MapDashboard({ onLogout }) {
   const markerCacheRef = useRef({}); // maps inc.id -> { outer, inner, core, marker }
   
   const [activeIncidents, setActiveIncidents] = useState([]);
+  const [feedStatus, setFeedStatus] = useState({
+    loading: true,
+    error: '',
+    message: '',
+  });
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 640);
   const [mobileExpanded, setMobileExpanded] = useState(false);
   
   // Inactivity and Wake Lock states
   const [isIdle, setIsIdle] = useState(false);
-  const lastInteractionRef = useRef(Date.now());
+  const lastInteractionRef = useRef(0);
   const idleCheckIntervalRef = useRef(null);
 
   const resetIdleTimer = useCallback(() => {
@@ -401,6 +436,7 @@ function MapDashboard({ onLogout }) {
 
   // Reset idle timer on user action
   useEffect(() => {
+    lastInteractionRef.current = Date.now();
     const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
     const handler = () => resetIdleTimer();
     events.forEach(e => window.addEventListener(e, handler, { passive: true }));
@@ -460,11 +496,30 @@ function MapDashboard({ onLogout }) {
 
   // Load and refresh active incident lists
   const refreshIncidents = useCallback(async () => {
-    const allIncidents = await fetchLiveIncidents();
-    const active = getActiveIncidents(allIncidents);
-    setActiveIncidents(active);
-    return active;
-  }, []);
+    setFeedStatus((prev) => ({ ...prev, loading: true, error: '' }));
+
+    try {
+      const allIncidents = isDemo
+        ? generateDemoIncidents()
+        : await fetchLiveHeatmapIncidents();
+      const active = getActiveIncidents(allIncidents);
+      setActiveIncidents(active);
+      setFeedStatus({
+        loading: false,
+        error: '',
+        message: isDemo ? 'Demo/sample incident data' : '',
+      });
+      return active;
+    } catch (error) {
+      setActiveIncidents([]);
+      setFeedStatus({
+        loading: false,
+        error: error.message || 'Unable to load live incidents.',
+        message: '',
+      });
+      return [];
+    }
+  }, [isDemo]);
 
   // Center on incident when clicked in list
   const handleIncidentClick = (inc) => {
@@ -579,17 +634,24 @@ function MapDashboard({ onLogout }) {
 
         // Custom details card bound as a tooltip
         const classificationClass = inc.classification ? inc.classification.toLowerCase().replace(' ', '-') : 'residential';
+        const safeType = escapeHtml(inc.type);
+        const safeSeverity = escapeHtml(inc.severity);
+        const safeLocation = escapeHtml(inc.location);
+        const safeClassification = escapeHtml(inc.classification || 'Residential');
+        const safeRelativeTime = escapeHtml(formatRelativeTime(inc.createdAt));
+        const safeClockTime = escapeHtml(formatClockTime(inc.createdAt));
+        const routeUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(inc.latitude)},${encodeURIComponent(inc.longitude)}`;
         const tooltipContent = `
           <div class="radar-tooltip-card">
             <span class="tooltip-marker-type ${inc.severity.toLowerCase()}"></span>
             <div class="tooltip-body">
               <div class="tooltip-classification ${classificationClass}">
-                ${inc.classification || 'Residential'}
+                ${safeClassification}
               </div>
-              <p class="tooltip-loc">${inc.location}</p>
-              <p class="tooltip-desc">${inc.type}</p>
-              <p class="tooltip-time">${formatRelativeTime(inc.createdAt)}</p>
-              <a href="https://www.google.com/maps/dir/?api=1&destination=${inc.latitude},${inc.longitude}" target="_blank" rel="noopener noreferrer" class="tooltip-route-btn">
+              <p class="tooltip-loc">${safeLocation}</p>
+              <p class="tooltip-desc">${safeType}</p>
+              <p class="tooltip-time">${safeRelativeTime}</p>
+              <a href="${routeUrl}" target="_blank" rel="noopener noreferrer" class="tooltip-route-btn">
                 Route to Accident
               </a>
             </div>
@@ -609,17 +671,17 @@ function MapDashboard({ onLogout }) {
         const popupContent = `
           <div class="heatmap-popup-card">
             <div class="popup-header">
-              <span class="popup-title">${inc.type}</span>
-              <span class="popup-badge ${inc.severity.toLowerCase()}">${inc.severity}</span>
+              <span class="popup-title">${safeType}</span>
+              <span class="popup-badge ${inc.severity.toLowerCase()}">${safeSeverity}</span>
             </div>
             <div class="popup-classification-badge ${classificationClass}">
-              ${inc.classification || 'Residential'}
+              ${safeClassification}
             </div>
-            <p class="popup-location">${inc.location}</p>
+            <p class="popup-location">${safeLocation}</p>
             <div class="popup-meta">
-              <span>Reported ${formatClockTime(inc.createdAt)} (${formatRelativeTime(inc.createdAt)})</span>
+              <span>Reported ${safeClockTime} (${safeRelativeTime})</span>
             </div>
-            <a href="https://www.google.com/maps/dir/?api=1&destination=${inc.latitude},${inc.longitude}" target="_blank" rel="noopener noreferrer" class="popup-route-btn">
+            <a href="${routeUrl}" target="_blank" rel="noopener noreferrer" class="popup-route-btn">
               Route to Accident
             </a>
           </div>
@@ -819,13 +881,13 @@ function MapDashboard({ onLogout }) {
           <img src="/logo.png" alt="Stay Calm" className="h-[54px] w-auto object-contain -my-4" />
           <div className="flex flex-col">
             <span className="text-white font-bold text-xs tracking-[0.12em] uppercase leading-none">Stay Calm Today</span>
-            <span className="text-[#8AA3CC] text-[9px] tracking-wider uppercase mt-0.5">Partner Heat Map</span>
+            <span className="text-[#8AA3CC] text-[9px] tracking-wider uppercase mt-0.5">{copy.eyebrow}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 bg-[#0A1628]/80 px-2.5 py-1 rounded-full border border-[#1E3660]/40">
             <span className="live-dot" />
-            <span className="text-[#22C55E] text-[10px] font-bold tracking-wider uppercase">Live</span>
+            <span className="text-[#22C55E] text-[10px] font-bold tracking-wider uppercase">{copy.status}</span>
           </div>
           <div className="flex items-center gap-1 bg-[#0A1628]/80 px-2.5 py-1 rounded-full border border-[#1E3660]/40">
             <span className="text-[#D4AF37] text-[10px] font-bold">{activeIncidents.length}</span>
@@ -866,7 +928,7 @@ function MapDashboard({ onLogout }) {
           >
             <div className="flex items-center gap-2">
               <h2 className="text-white font-bold text-[10px] tracking-[0.1em] uppercase">
-                Live Incidents
+                {copy.panelTitle}
               </h2>
               <span className="bg-[#D4AF37]/15 text-[#D4AF37] text-[9px] font-bold px-1.5 py-0.5 rounded-full">
                 {activeIncidents.length}
@@ -888,9 +950,23 @@ function MapDashboard({ onLogout }) {
 
           {/* Scrollable list */}
           <div className="side-panel-scroll flex-1 overflow-y-auto px-2 py-2">
-            {activeIncidents.length === 0 ? (
+            {feedStatus.loading ? (
+              <div className="heatmap-feed-state text-center py-8">
+                <p className="text-[#8AA3CC] text-sm font-semibold">Loading incidents...</p>
+              </div>
+            ) : feedStatus.error ? (
+              <div className="heatmap-feed-state text-center py-8">
+                <p className="text-red-300 text-sm font-semibold">Feed unavailable</p>
+                <p className="text-[#5C7EB5] text-xs mt-1 px-3">{feedStatus.error}</p>
+              </div>
+            ) : activeIncidents.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-[#5C7EB5] text-sm">No active incidents</p>
+                <p className="text-[#5C7EB5] text-sm">{copy.empty}</p>
+                {!isDemo && (
+                  <p className="text-[#5C7EB5] text-[10px] mt-1 px-3">
+                    Airtable/Make feed endpoint is not connected yet.
+                  </p>
+                )}
               </div>
             ) : (
               activeIncidents.map((inc) => (
