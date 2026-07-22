@@ -104,19 +104,38 @@ async function fetchAirtableRecords({ token, baseId, tableName }) {
     if (offset) params.set('offset', offset);
 
     const url = `${AIRTABLE_API_BASE}/${encodeURIComponent(baseId)}/${encodeURIComponent(tableName)}?${params.toString()}`;
+    console.info('Airtable heat-map request diagnostics:', {
+      baseId,
+      tableName,
+      tokenPrefix: token.slice(0, 3),
+      tokenLength: token.length,
+      url,
+    });
+
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/json',
       },
     });
+    const responseBody = await response.text();
+
+    console.info('Airtable heat-map response diagnostics:', {
+      status: response.status,
+      body: responseBody,
+    });
 
     if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Airtable returned ${response.status}: ${detail}`);
+      throw new Error(`Airtable returned ${response.status}`);
     }
 
-    const payload = await response.json();
+    let payload;
+    try {
+      payload = JSON.parse(responseBody);
+    } catch {
+      throw new Error('Airtable returned malformed JSON');
+    }
+
     records.push(...(payload.records || []));
     offset = payload.offset || '';
   } while (offset);
