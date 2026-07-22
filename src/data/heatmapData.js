@@ -901,15 +901,21 @@ const DEFAULT_LIVE_INCIDENT_ENDPOINT = '/api/heatmap/incidents';
 const VALID_SEVERITIES = new Set(['Low', 'Medium', 'High']);
 
 export const AIRTABLE_INCIDENT_FIELDS = [
-  'Incident ID',
-  'Event type',
-  'Subtype',
+  'Accident ID',
+  'Location',
+  'GPS Coordinates',
   'Description',
-  'Roadway or location',
-  'Latitude',
-  'Longitude',
-  'Reported time',
+  '511 event ID',
+  'Detected Time',
+  'Subtype',
 ];
+
+const SUBTYPE_DISPLAY_TYPES = {
+  incident: 'Traffic Incident',
+  'disabled vehicle': 'Disabled Vehicle',
+  'disabled semi trailer': 'Disabled Semi-Trailer',
+  'vehicle on fire': 'Vehicle Fire',
+};
 
 // ─── FETCH LIVE INCIDENTS FROM AIRTABLE ──────────────────────────────────────
 // Normalizes Airtable/Make.com incident payloads into the map's internal model.
@@ -929,20 +935,35 @@ function normalizeSeverity(value) {
   return VALID_SEVERITIES.has(severity) ? severity : 'Medium';
 }
 
+function parseGpsCoordinates(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+
+  const latitude = Number(match[1]);
+  const longitude = -Math.abs(Number(match[2]));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  return { latitude, longitude };
+}
+
 function normalizeLiveIncident(record) {
   const fields = record?.fields || record || {};
-  const id = String(readIncidentField(fields, ['Incident ID', 'IncidentID', 'incident_id', 'id'], record?.id || ''));
-  const eventType = String(readIncidentField(fields, ['Event type', 'Event Type', 'Type', 'type'], 'Accident'));
+  const id = String(readIncidentField(fields, ['511 event ID', 'Accident ID', 'Incident ID', 'IncidentID', 'incident_id', 'id'], record?.id || ''));
   const subtype = String(readIncidentField(fields, ['Subtype', 'Sub Type', 'subtype'], ''));
+  const normalizedSubtype = subtype.trim().toLowerCase();
+  const mappedType = SUBTYPE_DISPLAY_TYPES[normalizedSubtype];
+  const eventType = String(readIncidentField(fields, ['type', 'Event type', 'Event Type', 'Type'], mappedType || 'Traffic Incident'));
   const description = String(readIncidentField(fields, ['Description', 'description'], ''));
   const location = String(
-    readIncidentField(fields, ['Roadway or location', 'Roadway', 'Location', 'location', 'Address'], description || 'Unknown Location')
+    readIncidentField(fields, ['Location', 'location', 'Roadway or location', 'Roadway', 'Address'], description || 'Unknown Location')
   );
-  const latitude = Number(readIncidentField(fields, ['Latitude', 'latitude', 'Lat', 'lat']));
-  const longitude = Number(readIncidentField(fields, ['Longitude', 'longitude', 'Lng', 'lng', 'Long']));
+  const gps = parseGpsCoordinates(readIncidentField(fields, ['GPS Coordinates', 'gpsCoordinates']));
+  const latitude = Number(readIncidentField(fields, ['Latitude', 'latitude', 'Lat', 'lat'], gps?.latitude));
+  const longitude = Number(readIncidentField(fields, ['Longitude', 'longitude', 'Lng', 'lng', 'Long'], gps?.longitude));
   const reportedTime = readIncidentField(
     fields,
-    ['Reported time', 'Reported Time', 'ReportedTime', 'reported_time', 'CreatedAt', 'createdAt'],
+    ['Detected Time', 'DetectedTime', 'Reported time', 'Reported Time', 'ReportedTime', 'reported_time', 'CreatedAt', 'createdAt'],
     record?.createdTime || ''
   );
 
@@ -957,8 +978,8 @@ function normalizeLiveIncident(record) {
 
   return {
     id,
-    type: subtype ? `${eventType} - ${subtype}` : eventType,
-    subtype,
+    type: eventType,
+    subtype: normalizedSubtype || subtype,
     description,
     location,
     city: String(readIncidentField(fields, ['City', 'city'], 'Georgia')),
@@ -968,7 +989,7 @@ function normalizeLiveIncident(record) {
     createdAt: reportedDate.toISOString(),
     source: String(readIncidentField(fields, ['Source', 'source'], 'airtable')),
     status: String(readIncidentField(fields, ['Status', 'status'], 'Active')),
-    classification: getIncidentClassification(location),
+    classification: String(readIncidentField(fields, ['classification', 'Classification'], getIncidentClassification(location))),
   };
 }
 

@@ -637,7 +637,7 @@ function MapDashboard({ onLogout, mode }) {
         }).addTo(group);
 
         // Custom details card bound as a tooltip
-        const classificationClass = inc.classification ? inc.classification.toLowerCase().replace(' ', '-') : 'residential';
+        const classificationClass = inc.classification ? inc.classification.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'residential';
         const safeType = escapeHtml(inc.type);
         const safeSeverity = escapeHtml(inc.severity);
         const safeLocation = escapeHtml(inc.location);
@@ -859,6 +859,8 @@ function MapDashboard({ onLogout, mode }) {
 
   const getIncidentIconPath = (type) => {
     switch (type) {
+      case 'Traffic Incident':
+        return 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z';
       case 'Multi-Vehicle Collision':
         return 'M13 10V3L4 14h7v7l9-11h-7z';
       case 'Accident':
@@ -867,6 +869,10 @@ function MapDashboard({ onLogout, mode }) {
         return 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z';
       case 'Disabled Vehicle':
         return 'M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z';
+      case 'Disabled Semi-Trailer':
+        return 'M3 7h11v8H3V7zm11 3h3l3 3v2h-6v-5zM6 18a2 2 0 100-4 2 2 0 000 4zm11 0a2 2 0 100-4 2 2 0 000 4z';
+      case 'Vehicle Fire':
+        return 'M12 2s4 4.5 4 8a4 4 0 11-8 0c0-2 1-3.5 2.2-4.8C10.5 7.5 12 9 12 11c1.5-1.5 2-3.5 0-9z';
       default:
         return 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z';
     }
@@ -970,7 +976,7 @@ function MapDashboard({ onLogout, mode }) {
                 <p className="text-[#5C7EB5] text-sm">{copy.empty}</p>
                 {!isDemo && (
                   <p className="text-[#5C7EB5] text-[10px] mt-1 px-3">
-                    Airtable/Make feed endpoint is not connected yet.
+                    No active Airtable incidents are available right now.
                   </p>
                 )}
               </div>
