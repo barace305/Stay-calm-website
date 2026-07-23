@@ -109,6 +109,135 @@ html, body, #root {
   filter: drop-shadow(0 0 8px currentColor);
 }
 
+/* Live-only compact pictogram markers */
+.live-incident-marker-host {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.live-incident-marker {
+  --marker-accent: #f97316;
+  --marker-glow: rgba(249, 115, 22, 0.22);
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: var(--marker-accent);
+  background: rgba(6, 13, 24, 0.94);
+  border: 1px solid color-mix(in srgb, var(--marker-accent) 72%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.48), 0 0 7px var(--marker-glow);
+  transform: translateZ(0);
+  transition: transform 140ms ease, border-color 140ms ease;
+  will-change: transform;
+}
+
+.live-incident-marker.severity-low,
+.live-tooltip-icon.severity-low,
+.live-popup-icon.severity-low {
+  --marker-accent: #eab308;
+  --marker-glow: rgba(234, 179, 8, 0.18);
+}
+
+.live-incident-marker.severity-medium,
+.live-tooltip-icon.severity-medium,
+.live-popup-icon.severity-medium {
+  --marker-accent: #f97316;
+  --marker-glow: rgba(249, 115, 22, 0.22);
+}
+
+.live-incident-marker.severity-high,
+.live-tooltip-icon.severity-high,
+.live-popup-icon.severity-high {
+  --marker-accent: #ef4444;
+  --marker-glow: rgba(239, 68, 68, 0.3);
+}
+
+.live-marker-ring {
+  position: absolute;
+  inset: 3px;
+  border: 1px solid color-mix(in srgb, var(--marker-accent) 38%, transparent);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.live-marker-pictogram {
+  position: relative;
+  width: 17px;
+  height: 17px;
+  color: var(--marker-accent);
+  z-index: 1;
+}
+
+.live-incident-marker-host:hover .live-incident-marker {
+  transform: scale(1.1) translateZ(0);
+  border-color: var(--marker-accent);
+}
+
+.live-incident-tooltip {
+  padding: 7px 9px !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.5) !important;
+}
+
+.live-tooltip-card {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 210px;
+}
+
+.live-tooltip-icon,
+.live-popup-icon {
+  --marker-accent: #f97316;
+  --marker-glow: rgba(249, 115, 22, 0.22);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--marker-accent);
+  background: rgba(6, 13, 24, 0.8);
+  border: 1px solid color-mix(in srgb, var(--marker-accent) 45%, transparent);
+}
+
+.live-tooltip-icon {
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+}
+
+.live-tooltip-icon .live-marker-pictogram {
+  width: 14px;
+  height: 14px;
+}
+
+.live-tooltip-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.live-tooltip-copy strong {
+  color: #fff;
+  font-size: 10px;
+}
+
+.live-tooltip-copy span {
+  max-width: 165px;
+  overflow: hidden;
+  color: #8aa3cc;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-tooltip-copy time {
+  color: #6f8bb8;
+  font-size: 8px;
+}
+
 /* ─── LEAFLET POPUP HOLOGRAPHIC STYLE ───────────────────────────────────── */
 .heatmap-leaflet-popup .leaflet-popup-content-wrapper {
   background: rgba(6, 13, 24, 0.94) !important;
@@ -175,6 +304,72 @@ html, body, #root {
   border-top: 1px solid rgba(30, 54, 96, 0.3);
   padding-top: 4px;
   margin-top: 2px;
+}
+
+.live-popup-card {
+  gap: 7px;
+}
+
+.live-popup-header {
+  justify-content: flex-start;
+  gap: 7px;
+}
+
+.live-popup-header .popup-title {
+  flex: 1;
+}
+
+.live-popup-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+.live-popup-icon .live-marker-pictogram {
+  width: 15px;
+  height: 15px;
+}
+
+.live-popup-description {
+  margin: 0;
+  color: #d3deef;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.live-popup-meta {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-top: 5px;
+  border-top: 1px solid rgba(30, 54, 96, 0.35);
+}
+
+.live-popup-meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 8px;
+}
+
+.live-popup-meta dt {
+  color: #5c7eb5;
+  text-transform: uppercase;
+}
+
+.live-popup-meta dd {
+  margin: 0;
+  color: #b8c8e2;
+  text-align: right;
+}
+
+.popup-classification-badge.incident,
+.popup-classification-badge.disabled-vehicle,
+.popup-classification-badge.disabled-semi-trailer,
+.popup-classification-badge.vehicle-on-fire {
+  color: #8aa3cc !important;
+  background: rgba(138, 163, 204, 0.08) !important;
+  border: 1px solid rgba(138, 163, 204, 0.18);
 }
 
 /* ─── LOGIN FORM ─────────────────────────────────────────────────────────── */
@@ -289,6 +484,11 @@ html, body, #root {
   overflow-y: auto;
 }
 
+.heatmap-live .side-panel-scroll {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .side-panel-scroll::-webkit-scrollbar {
   width: 3px;
 }
@@ -384,6 +584,30 @@ html, body, #root {
 .incident-icon.high { background: rgba(220, 38, 38, 0.1); color: #FCA5A5; }
 .incident-icon.medium { background: rgba(249, 115, 22, 0.1); color: #FDBA74; }
 .incident-icon.low { background: rgba(212, 175, 55, 0.1); color: #D4AF37; }
+
+.live-incident-icon {
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: rgba(6, 13, 24, 0.72) !important;
+}
+
+.live-last-updated {
+  margin-top: 2px;
+  color: #7792bd;
+  font-size: 7.5px;
+  white-space: nowrap;
+}
+
+.live-refresh-warning {
+  margin: 0 2px 6px;
+  padding: 5px 7px;
+  color: #fdba74;
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.16);
+  border-radius: 4px;
+  font-size: 9px;
+  text-align: center;
+}
 
 /* Animations */
 @keyframes fadeIn {

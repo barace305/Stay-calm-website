@@ -64,6 +64,49 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
+function getLiveIncidentIconPath(type) {
+  switch (type) {
+    case 'Traffic Incident':
+    case 'Accident':
+      return 'M12 9v3m0 4h.01M10.3 4.7 3.8 17a2 2 0 0 0 1.77 2.93h12.86A2 2 0 0 0 20.2 17L13.7 4.7a1.92 1.92 0 0 0-3.4 0Z';
+    case 'Disabled Vehicle':
+      return 'M5 16h14l-1.2-5.2A2.3 2.3 0 0 0 15.56 9H8.44a2.3 2.3 0 0 0-2.24 1.8L5 16Zm2 0v2m10-2v2M8 13h.01M16 13h.01M12 6v1m0-4v1';
+    case 'Disabled Semi-Trailer':
+      return 'M3 7h10v8H3V7Zm10 3h4l3 3v2h-7v-5ZM6 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm11 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z';
+    case 'Vehicle Fire':
+      return 'M12.2 2.5c.7 3-1.9 4.3-1.9 6.7 0 1.2.8 2.1 1.7 2.8-.1-1.6.9-3 2.2-4.2 1.4 1.7 2.8 3.6 2.8 6.1A5 5 0 0 1 7 14c0-3.3 2.3-5.1 5.2-11.5ZM9.8 17.2A2.2 2.2 0 0 0 12 19.5a2.2 2.2 0 0 0 2.2-2.3c0-1.2-.8-2.1-2.2-3.2-1.4 1.1-2.2 2-2.2 3.2Z';
+    case 'Multi-Vehicle Collision':
+      return 'M13 10V3L4 14h7v7l9-11h-7z';
+    case 'Heavy Delay':
+      return 'M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z';
+    default:
+      return 'M12 9v3m0 4h.01M10.3 4.7 3.8 17a2 2 0 0 0 1.77 2.93h12.86A2 2 0 0 0 20.2 17L13.7 4.7a1.92 1.92 0 0 0-3.4 0Z';
+  }
+}
+
+function incidentSvgMarkup(type, className = '') {
+  return `<svg class="${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="${getLiveIncidentIconPath(type)}"></path></svg>`;
+}
+
+function incidentListsMatch(previous, next) {
+  if (previous.length !== next.length) return false;
+
+  return previous.every((incident, index) => {
+    const candidate = next[index];
+    return candidate
+      && incident.id === candidate.id
+      && incident.type === candidate.type
+      && incident.subtype === candidate.subtype
+      && incident.description === candidate.description
+      && incident.location === candidate.location
+      && incident.latitude === candidate.latitude
+      && incident.longitude === candidate.longitude
+      && incident.createdAt === candidate.createdAt
+      && incident.severity === candidate.severity
+      && incident.status === candidate.status;
+  });
+}
+
 export default function HeatMap({ mode = 'live' }) {
   const isDemo = mode === 'demo';
   const [authenticated, setAuthenticated] = useState(
@@ -415,12 +458,14 @@ function MapDashboard({ onLogout, mode }) {
   const layerGroupRef = useRef(null);
   const headerRef = useRef(null);
   const markerCacheRef = useRef({}); // maps inc.id -> { outer, inner, core, marker }
+  const hasLoadedFeedRef = useRef(false);
   
   const [activeIncidents, setActiveIncidents] = useState([]);
   const [feedStatus, setFeedStatus] = useState({
     loading: true,
     error: '',
     message: '',
+    lastUpdated: '',
   });
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 640);
@@ -500,28 +545,35 @@ function MapDashboard({ onLogout, mode }) {
 
   // Load and refresh active incident lists
   const refreshIncidents = useCallback(async () => {
-    setFeedStatus((prev) => ({ ...prev, loading: true, error: '' }));
+    setFeedStatus((prev) => ({ ...prev, loading: !hasLoadedFeedRef.current, error: '' }));
 
     try {
       const allIncidents = isDemo
         ? generateDemoIncidents()
         : await fetchLiveHeatmapIncidents();
       const active = getActiveIncidents(allIncidents);
-      setActiveIncidents(active);
+      activeIncidentsRef.current = active;
+      setActiveIncidents((previous) => incidentListsMatch(previous, active) ? previous : active);
+      hasLoadedFeedRef.current = true;
       setFeedStatus({
         loading: false,
         error: '',
         message: isDemo ? 'Demo/sample incident data' : '',
+        lastUpdated: new Date().toISOString(),
       });
       return active;
     } catch (error) {
-      setActiveIncidents([]);
-      setFeedStatus({
+      const remainingActive = getActiveIncidents(activeIncidentsRef.current);
+      activeIncidentsRef.current = remainingActive;
+      setActiveIncidents((previous) => incidentListsMatch(previous, remainingActive) ? previous : remainingActive);
+      hasLoadedFeedRef.current = true;
+      setFeedStatus((previous) => ({
         loading: false,
         error: error.message || 'Unable to load live incidents.',
         message: '',
-      });
-      return [];
+        lastUpdated: previous.lastUpdated,
+      }));
+      return remainingActive;
     }
   }, [isDemo]);
 
@@ -556,6 +608,132 @@ function MapDashboard({ onLogout, mode }) {
 
     const group = layerGroupRef.current;
     const cache = markerCacheRef.current;
+
+    if (!isDemo) {
+      const activeIds = new Set(activeList.map((incident) => incident.id));
+
+      Object.keys(cache).forEach((id) => {
+        if (!activeIds.has(id)) {
+          if (cache[id]?.marker) group.removeLayer(cache[id].marker);
+          delete cache[id];
+        }
+      });
+
+      activeList.forEach((incident) => {
+        const severityClass = incident.severity.toLowerCase();
+        const typeClass = String(incident.subtype || 'incident').replace(/[^a-z0-9]+/g, '-');
+        const safeType = escapeHtml(incident.type);
+        const safeLocation = escapeHtml(incident.location);
+        const safeDescription = escapeHtml(incident.description || 'No additional description provided.');
+        const safeSubtype = escapeHtml(incident.subtype || 'incident');
+        const safeSeverity = escapeHtml(incident.severity);
+        const safeClassification = escapeHtml(incident.classification || incident.type);
+        const safeRelativeTime = escapeHtml(formatRelativeTime(incident.createdAt));
+        const safeClockTime = escapeHtml(formatClockTime(incident.createdAt));
+        const iconMarkup = incidentSvgMarkup(incident.type, 'live-marker-pictogram');
+        const routeUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(incident.latitude)},${encodeURIComponent(incident.longitude)}`;
+        const markerMarkup = `
+          <div class="live-incident-marker severity-${severityClass} type-${typeClass}" role="img" aria-label="${safeType}">
+            <span class="live-marker-ring"></span>
+            ${iconMarkup}
+          </div>
+        `;
+        const tooltipContent = `
+          <div class="live-tooltip-card">
+            <span class="live-tooltip-icon severity-${severityClass}">${iconMarkup}</span>
+            <div class="live-tooltip-copy">
+              <strong>${safeType}</strong>
+              <span>${safeLocation}</span>
+              <time>${safeRelativeTime}</time>
+            </div>
+          </div>
+        `;
+        const popupContent = `
+          <div class="heatmap-popup-card live-popup-card">
+            <div class="popup-header live-popup-header">
+              <span class="live-popup-icon severity-${severityClass}">${iconMarkup}</span>
+              <span class="popup-title">${safeType}</span>
+              <span class="popup-badge ${severityClass}">${safeSeverity}</span>
+            </div>
+            <div class="popup-classification-badge ${typeClass}">${safeClassification}</div>
+            <p class="popup-location">${safeLocation}</p>
+            <p class="live-popup-description">${safeDescription}</p>
+            <dl class="live-popup-meta">
+              <div><dt>Subtype</dt><dd>${safeSubtype}</dd></div>
+              <div><dt>Detected</dt><dd>${safeClockTime} (${safeRelativeTime})</dd></div>
+            </dl>
+            <a href="${routeUrl}" target="_blank" rel="noopener noreferrer" class="popup-route-btn">Open Route</a>
+          </div>
+        `;
+        const visualSignature = `${incident.type}|${incident.subtype}|${incident.severity}`;
+        const positionSignature = `${incident.latitude}|${incident.longitude}`;
+        const contentSignature = `${visualSignature}|${incident.location}|${incident.description}|${incident.createdAt}|${safeRelativeTime}`;
+        const cached = cache[incident.id];
+
+        if (!cached) {
+          const icon = L.divIcon({
+            className: 'live-incident-marker-host',
+            html: markerMarkup,
+            iconSize: [34, 34],
+            iconAnchor: [17, 17],
+            tooltipAnchor: [0, -18],
+            popupAnchor: [0, -16],
+          });
+          const marker = L.marker([incident.latitude, incident.longitude], {
+            icon,
+            keyboard: true,
+            riseOnHover: true,
+            title: incident.type,
+          }).addTo(group);
+
+          marker.bindTooltip(tooltipContent, {
+            direction: 'top',
+            offset: [0, -4],
+            opacity: 0.98,
+            className: 'radar-spatial-tooltip live-incident-tooltip',
+          });
+          marker.bindPopup(popupContent, {
+            className: 'heatmap-leaflet-popup',
+            closeButton: true,
+            offset: [0, -2],
+            maxWidth: 260,
+          });
+
+          cache[incident.id] = {
+            marker,
+            visualSignature,
+            positionSignature,
+            contentSignature,
+          };
+          return;
+        }
+
+        if (cached.positionSignature !== positionSignature) {
+          cached.marker.setLatLng([incident.latitude, incident.longitude]);
+          cached.positionSignature = positionSignature;
+        }
+
+        if (cached.visualSignature !== visualSignature) {
+          cached.marker.setIcon(L.divIcon({
+            className: 'live-incident-marker-host',
+            html: markerMarkup,
+            iconSize: [34, 34],
+            iconAnchor: [17, 17],
+            tooltipAnchor: [0, -18],
+            popupAnchor: [0, -16],
+          }));
+          cached.visualSignature = visualSignature;
+        }
+
+        if (cached.contentSignature !== contentSignature) {
+          cached.marker.setTooltipContent(tooltipContent);
+          cached.marker.setPopupContent(popupContent);
+          cached.contentSignature = contentSignature;
+        }
+      });
+
+      return;
+    }
 
     // 1. Calculate map viewport boundaries with an extended buffer (approx 0.05 lat/lng grid)
     const bounds = map.getBounds();
@@ -733,7 +911,7 @@ function MapDashboard({ onLogout, mode }) {
         }
       }
     });
-  }, []);
+  }, [isDemo]);
 
   // Native touch event handler on mobile panel header to bypass React 17+ event delegation blocks
   useEffect(() => {
@@ -761,6 +939,7 @@ function MapDashboard({ onLogout, mode }) {
   useEffect(() => {
     const L = window.L;
     if (!L || !mapContainerRef.current || mapInstanceRef.current) return;
+    let disposed = false;
 
     const map = L.map(mapContainerRef.current, {
       center: MAP_CENTER,
@@ -790,7 +969,9 @@ function MapDashboard({ onLogout, mode }) {
     mapInstanceRef.current = map;
 
     refreshIncidents().then((active) => {
-      if (active) updateHeatLayer(map, active);
+      if (!disposed && mapInstanceRef.current === map && active) {
+        updateHeatLayer(map, active);
+      }
     });
 
     // Bind map movement event listeners to trigger bounding-box spatial pruning
@@ -821,6 +1002,7 @@ function MapDashboard({ onLogout, mode }) {
     window.addEventListener('resize', handleResize);
 
     return () => {
+      disposed = true;
       window.removeEventListener('resize', handleResize);
       map.off('moveend', handleMapMovement);
       map.off('zoomend', handleMapMovement);
@@ -883,7 +1065,7 @@ function MapDashboard({ onLogout, mode }) {
     : `heatmap-side-panel ${sidebarOpen ? '' : 'panel-closed'}`;
 
   return (
-    <div className="heatmap-container fixed inset-0 bg-[#060D18] font-sans antialiased overflow-hidden flex flex-col" style={{ height: '100dvh' }}>
+    <div className={`heatmap-container ${!isDemo ? 'heatmap-live' : ''} fixed inset-0 bg-[#060D18] font-sans antialiased overflow-hidden flex flex-col`} style={{ height: '100dvh' }}>
 
       {/* ─── HEADER BAR (Flex Block at the Top) ────────────────────── */}
       <div className="heatmap-header w-full shrink-0 px-4 py-2 flex items-center justify-between">
@@ -947,7 +1129,12 @@ function MapDashboard({ onLogout, mode }) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[#5C7EB5] text-[9px] uppercase tracking-wider">90m range</span>
+              <div className="flex flex-col items-end leading-tight">
+                <span className="text-[#5C7EB5] text-[9px] uppercase tracking-wider">90m range</span>
+                {!isDemo && feedStatus.lastUpdated && (
+                  <span className="live-last-updated">Last updated {formatClockTime(feedStatus.lastUpdated)}</span>
+                )}
+              </div>
               <button 
                 className="text-[#5C7EB5] hover:text-white transition-colors p-1"
                 style={{ pointerEvents: 'none' }}
@@ -966,7 +1153,7 @@ function MapDashboard({ onLogout, mode }) {
               <div className="heatmap-feed-state text-center py-8">
                 <p className="text-[#8AA3CC] text-sm font-semibold">Loading incidents...</p>
               </div>
-            ) : feedStatus.error ? (
+            ) : feedStatus.error && activeIncidents.length === 0 ? (
               <div className="heatmap-feed-state text-center py-8">
                 <p className="text-red-300 text-sm font-semibold">Feed unavailable</p>
                 <p className="text-[#5C7EB5] text-xs mt-1 px-3">{feedStatus.error}</p>
@@ -981,27 +1168,32 @@ function MapDashboard({ onLogout, mode }) {
                 )}
               </div>
             ) : (
-              activeIncidents.map((inc) => (
-                <div
-                  key={inc.id}
-                  onClick={() => handleIncidentClick(inc)}
-                  className={`incident-row severity-${inc.severity.toLowerCase()} flex items-center gap-2 px-2 py-2 mb-0.5 rounded-lg`}
-                >
-                  <div className={`incident-icon ${inc.severity.toLowerCase()}`}>
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={getIncidentIconPath(inc.type)} />
-                    </svg>
+              <>
+                {feedStatus.error && (
+                  <div className="live-refresh-warning">Refresh delayed. Showing recent cached incidents.</div>
+                )}
+                {activeIncidents.map((inc) => (
+                  <div
+                    key={inc.id}
+                    onClick={() => handleIncidentClick(inc)}
+                    className={`incident-row severity-${inc.severity.toLowerCase()} flex items-center gap-2 px-2 py-2 mb-0.5 rounded-lg`}
+                  >
+                    <div className={`incident-icon ${inc.severity.toLowerCase()} ${!isDemo ? 'live-incident-icon' : ''}`}>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={isDemo ? getIncidentIconPath(inc.type) : getLiveIncidentIconPath(inc.type)} />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-xs font-semibold truncate leading-normal">{inc.type}</p>
+                      <p className="text-[#8AA3CC] text-[10px] truncate leading-tight mt-0.5">{inc.location}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-0.5 shrink-0 pl-1">
+                      <span className={`severity-badge ${inc.severity.toLowerCase()}`}>{inc.severity}</span>
+                      <span className="text-[#5C7EB5] text-[8.5px] whitespace-nowrap mt-0.5">{formatRelativeTime(inc.createdAt)}</span>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-xs font-semibold truncate leading-normal">{inc.type}</p>
-                    <p className="text-[#8AA3CC] text-[10px] truncate leading-tight mt-0.5">{inc.location}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-0.5 shrink-0 pl-1">
-                    <span className={`severity-badge ${inc.severity.toLowerCase()}`}>{inc.severity}</span>
-                    <span className="text-[#5C7EB5] text-[8.5px] whitespace-nowrap mt-0.5">{formatRelativeTime(inc.createdAt)}</span>
-                  </div>
-                </div>
-              ))
+                ))}
+              </>
             )}
           </div>
 

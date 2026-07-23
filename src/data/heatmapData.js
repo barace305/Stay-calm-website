@@ -906,6 +906,7 @@ export const AIRTABLE_INCIDENT_FIELDS = [
   'GPS Coordinates',
   'Description',
   '511 event ID',
+  'detected time',
   'Detected Time',
   'Subtype',
 ];
@@ -963,7 +964,7 @@ function normalizeLiveIncident(record) {
   const longitude = Number(readIncidentField(fields, ['Longitude', 'longitude', 'Lng', 'lng', 'Long'], gps?.longitude));
   const reportedTime = readIncidentField(
     fields,
-    ['Detected Time', 'DetectedTime', 'Reported time', 'Reported Time', 'ReportedTime', 'reported_time', 'CreatedAt', 'createdAt'],
+    ['detected time', 'Detected Time', 'DetectedTime', 'Reported time', 'Reported Time', 'ReportedTime', 'reported_time', 'CreatedAt', 'createdAt'],
     record?.createdTime || ''
   );
 
@@ -1015,14 +1016,16 @@ export function getActiveIncidents(incidents) {
   const now = Date.now();
   const thresholdMs = SCRUB_THRESHOLD_MINUTES * 60 * 1000;
 
-  return incidents.filter((incident) => {
-    const age = now - new Date(incident.createdAt).getTime();
-    if (incident.source === 'airtable') {
-      // Allow live records up to 24 hours old so manually entered ones or long-running active incidents show
-      return age < 24 * 60 * 60 * 1000 && incident.status === 'Active';
-    }
-    return age < thresholdMs && incident.status === 'Active';
-  });
+  return incidents
+    .filter((incident) => {
+      const detectedAt = new Date(incident.createdAt);
+      const detectedAtMs = detectedAt.getTime();
+      if (Number.isNaN(detectedAtMs)) return false;
+
+      const age = now - detectedAtMs;
+      return age >= 0 && age <= thresholdMs && incident.status === 'Active';
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 // ─── SEVERITY → HEAT INTENSITY ──────────────────────────────────────────────
@@ -1054,7 +1057,9 @@ export function getAgeDecay(createdAtISO) {
 export function formatRelativeTime(isoString) {
   const now = Date.now();
   const then = new Date(isoString).getTime();
-  const diffMs = now - then;
+  if (Number.isNaN(then)) return '';
+
+  const diffMs = Math.max(0, now - then);
   const diffMin = Math.floor(diffMs / 60000);
 
   if (diffMin < 1) return 'Just now';

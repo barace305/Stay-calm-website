@@ -1,4 +1,5 @@
 const AIRTABLE_API_BASE = 'https://api.airtable.com/v0';
+const LIVE_INCIDENT_WINDOW_MS = 90 * 60 * 1000;
 
 const SUBTYPE_DISPLAY = {
   incident: {
@@ -56,7 +57,7 @@ function normalizeSubtype(value) {
 
 function normalizeDetectedTime(value) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function normalizeRecord(record) {
@@ -64,13 +65,14 @@ function normalizeRecord(record) {
   const subtype = normalizeSubtype(fields.Subtype);
   const subtypeMeta = SUBTYPE_DISPLAY[subtype];
   const gps = parseGpsCoordinates(fields['GPS Coordinates']);
-  const createdAt = normalizeDetectedTime(fields['detected time'] || fields['Detected Time']);
+  const detectedAt = normalizeDetectedTime(fields['detected time'] || fields['Detected Time']);
   const eventId = fields['511 event ID'] || fields['Accident ID'] || record.id;
 
-  if (!eventId || !gps || !createdAt || !subtypeMeta) {
+  if (!eventId || !gps || !detectedAt || !subtypeMeta) {
     return {
       incident: null,
-      reason: !gps ? 'malformed_gps' : !createdAt ? 'malformed_detected_time' : !subtypeMeta ? 'unsupported_subtype' : 'missing_id',
+      detectedAt: null,
+      reason: !gps ? 'malformed_gps' : !detectedAt ? 'malformed_timestamps' : !subtypeMeta ? 'unsupported_subtype' : 'missing_id',
     };
   }
 
@@ -83,7 +85,7 @@ function normalizeRecord(record) {
       location: String(fields.Location || 'Unknown Location'),
       latitude: gps.latitude,
       longitude: gps.longitude,
-      createdAt,
+      createdAt: detectedAt.toISOString(),
       source: 'airtable',
       status: 'Active',
       severity: subtypeMeta.severity,
@@ -91,6 +93,7 @@ function normalizeRecord(record) {
       airtableRecordId: record.id,
       accidentId: fields['Accident ID'] ? String(fields['Accident ID']) : '',
     },
+    detectedAt,
     reason: '',
   };
 }
@@ -104,38 +107,19 @@ async function fetchAirtableRecords({ token, baseId, tableName }) {
     if (offset) params.set('offset', offset);
 
     const url = `${AIRTABLE_API_BASE}/${encodeURIComponent(baseId)}/${encodeURIComponent(tableName)}?${params.toString()}`;
-    console.info('Airtable heat-map request diagnostics:', {
-      baseId,
-      tableName,
-      tokenPrefix: token.slice(0, 3),
-      tokenLength: token.length,
-      url,
-    });
-
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/json',
       },
     });
-    const responseBody = await response.text();
-
-    console.info('Airtable heat-map response diagnostics:', {
-      status: response.status,
-      body: responseBody,
-    });
 
     if (!response.ok) {
+      console.error('Airtable heat-map upstream error:', { status: response.status });
       throw new Error(`Airtable returned ${response.status}`);
     }
 
-    let payload;
-    try {
-      payload = JSON.parse(responseBody);
-    } catch {
-      throw new Error('Airtable returned malformed JSON');
-    }
-
+    const payload = await response.json();
     records.push(...(payload.records || []));
     offset = payload.offset || '';
   } while (offset);
@@ -161,11 +145,15 @@ export default async function handler(req, res) {
 
   try {
     const records = await fetchAirtableRecords({ token, baseId, tableName });
+    const now = new Date();
+    const nowMs = now.getTime();
     const seenEventIds = new Set();
     const skipped = {
       duplicate_511_event_id: 0,
       malformed_gps: 0,
-      malformed_detected_time: 0,
+      malformed_timestamps: 0,
+      future_timestamps: 0,
+      stale_records: 0,
       unsupported_subtype: 0,
       missing_id: 0,
     };
@@ -173,9 +161,20 @@ export default async function handler(req, res) {
     const incidents = [];
 
     for (const record of records) {
-      const { incident, reason } = normalizeRecord(record);
+      const { incident, detectedAt, reason } = normalizeRecord(record);
       if (!incident) {
         skipped[reason] += 1;
+        continue;
+      }
+
+      const detectedAtMs = detectedAt.getTime();
+      if (detectedAtMs > nowMs) {
+        skipped.future_timestamps += 1;
+        continue;
+      }
+
+      if (nowMs - detectedAtMs > LIVE_INCIDENT_WINDOW_MS) {
+        skipped.stale_records += 1;
         continue;
       }
 
@@ -187,6 +186,8 @@ export default async function handler(req, res) {
       seenEventIds.add(incident.id);
       incidents.push(incident);
     }
+
+    incidents.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return sendJson(res, 200, {
       incidents,
