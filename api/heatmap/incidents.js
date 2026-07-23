@@ -22,6 +22,11 @@ const SUBTYPE_DISPLAY = {
     classification: 'Vehicle Fire',
     severity: 'High',
   },
+  crash: {
+    type: 'Crash',
+    classification: 'Confirmed Crash',
+    severity: 'High',
+  },
 };
 
 function sendJson(res, status, body) {

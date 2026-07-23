@@ -916,6 +916,7 @@ const SUBTYPE_DISPLAY_TYPES = {
   'disabled vehicle': 'Disabled Vehicle',
   'disabled semi trailer': 'Disabled Semi-Trailer',
   'vehicle on fire': 'Vehicle Fire',
+  crash: 'Crash',
 };
 
 // ─── FETCH LIVE INCIDENTS FROM AIRTABLE ──────────────────────────────────────
@@ -986,11 +987,17 @@ function normalizeLiveIncident(record) {
     city: String(readIncidentField(fields, ['City', 'city'], 'Georgia')),
     latitude,
     longitude,
-    severity: normalizeSeverity(readIncidentField(fields, ['Severity', 'severity'], 'Medium')),
+    severity: normalizeSeverity(readIncidentField(fields, ['Severity', 'severity'], normalizedSubtype === 'crash' ? 'High' : 'Medium')),
     createdAt: reportedDate.toISOString(),
     source: String(readIncidentField(fields, ['Source', 'source'], 'airtable')),
     status: String(readIncidentField(fields, ['Status', 'status'], 'Active')),
-    classification: String(readIncidentField(fields, ['classification', 'Classification'], getIncidentClassification(location))),
+    classification: String(
+      readIncidentField(
+        fields,
+        ['classification', 'Classification'],
+        normalizedSubtype === 'crash' ? 'Confirmed Crash' : getIncidentClassification(location)
+      )
+    ),
   };
 }
 

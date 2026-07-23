@@ -366,7 +366,8 @@ html, body, #root {
 .popup-classification-badge.incident,
 .popup-classification-badge.disabled-vehicle,
 .popup-classification-badge.disabled-semi-trailer,
-.popup-classification-badge.vehicle-on-fire {
+.popup-classification-badge.vehicle-on-fire,
+.popup-classification-badge.crash {
   color: #8aa3cc !important;
   background: rgba(138, 163, 204, 0.08) !important;
   border: 1px solid rgba(138, 163, 204, 0.18);
