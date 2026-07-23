@@ -64,7 +64,7 @@ function normalizeRecord(record) {
   const subtype = normalizeSubtype(fields.Subtype);
   const subtypeMeta = SUBTYPE_DISPLAY[subtype];
   const gps = parseGpsCoordinates(fields['GPS Coordinates']);
-  const createdAt = normalizeDetectedTime(fields['Detected Time']);
+  const createdAt = normalizeDetectedTime(fields['detected time'] || fields['Detected Time']);
   const eventId = fields['511 event ID'] || fields['Accident ID'] || record.id;
 
   if (!eventId || !gps || !createdAt || !subtypeMeta) {
