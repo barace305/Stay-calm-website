@@ -953,12 +953,23 @@ function normalizeLiveSubtype(value) {
 
 function parseGpsCoordinates(value) {
   const raw = String(value || '').trim();
-  const match = raw.match(/^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$/);
+  const commaMatch = raw.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  const joinedMatch = raw.match(/^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$/);
+  const match = commaMatch || joinedMatch;
   if (!match) return null;
 
   const latitude = Number(match[1]);
-  const longitude = -Math.abs(Number(match[2]));
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  const longitude = commaMatch
+    ? Number(match[2])
+    : -Math.abs(Number(match[2]));
+  if (
+    !Number.isFinite(latitude)
+    || !Number.isFinite(longitude)
+    || latitude < -90
+    || latitude > 90
+    || longitude < -180
+    || longitude > 180
+  ) return null;
 
   return { latitude, longitude };
 }
