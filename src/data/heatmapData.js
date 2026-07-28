@@ -912,7 +912,8 @@ export const AIRTABLE_INCIDENT_FIELDS = [
 ];
 
 const SUBTYPE_DISPLAY_TYPES = {
-  incident: 'Traffic Incident',
+  incident: 'Accident',
+  accident: 'Accident',
   'disabled vehicle': 'Disabled Vehicle',
   'disabled semi trailer': 'Disabled Semi-Trailer',
   'vehicle on fire': 'Vehicle Fire',
@@ -937,6 +938,19 @@ function normalizeSeverity(value) {
   return VALID_SEVERITIES.has(severity) ? severity : 'Medium';
 }
 
+function normalizeLiveSubtype(value) {
+  const normalized = String(value || '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+
+  return normalized.replace(/\s/g, '') === 'disabledvehicle'
+    ? 'disabled vehicle'
+    : normalized;
+}
+
 function parseGpsCoordinates(value) {
   const raw = String(value || '').trim();
   const match = raw.match(/^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$/);
@@ -953,9 +967,9 @@ function normalizeLiveIncident(record) {
   const fields = record?.fields || record || {};
   const id = String(readIncidentField(fields, ['511 event ID', 'Accident ID', 'Incident ID', 'IncidentID', 'incident_id', 'id'], record?.id || ''));
   const subtype = String(readIncidentField(fields, ['Subtype', 'Sub Type', 'subtype'], ''));
-  const normalizedSubtype = subtype.trim().toLowerCase();
+  const normalizedSubtype = normalizeLiveSubtype(subtype);
   const mappedType = SUBTYPE_DISPLAY_TYPES[normalizedSubtype];
-  const eventType = String(readIncidentField(fields, ['type', 'Event type', 'Event Type', 'Type'], mappedType || 'Traffic Incident'));
+  const eventType = String(readIncidentField(fields, ['type', 'Event type', 'Event Type', 'Type'], mappedType || 'Accident'));
   const description = String(readIncidentField(fields, ['Description', 'description'], ''));
   const location = String(
     readIncidentField(fields, ['Location', 'location', 'Roadway or location', 'Roadway', 'Address'], description || 'Unknown Location')

@@ -3,8 +3,13 @@ const LIVE_INCIDENT_WINDOW_MS = 90 * 60 * 1000;
 
 const SUBTYPE_DISPLAY = {
   incident: {
-    type: 'Traffic Incident',
-    classification: 'Possible Accident / Traffic Incident',
+    type: 'Accident',
+    classification: 'Possible Accident',
+    severity: 'Medium',
+  },
+  accident: {
+    type: 'Accident',
+    classification: 'Accident',
     severity: 'Medium',
   },
   'disabled vehicle': {
@@ -57,7 +62,48 @@ function parseGpsCoordinates(value) {
 }
 
 function normalizeSubtype(value) {
-  return String(value || '').trim().toLowerCase();
+  const normalized = String(value || '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+
+  return normalized.replace(/\s/g, '') === 'disabledvehicle'
+    ? 'disabled vehicle'
+    : normalized;
+}
+
+function readFirstField(fields, names) {
+  for (const name of names) {
+    const value = fields[name];
+    if (value !== undefined && value !== null && value !== '') {
+      return value;
+    }
+  }
+  return '';
+}
+
+function identifySource(fields, eventId) {
+  const explicitSource = String(
+    readFirstField(fields, ['Provider', 'provider', 'Source', 'source', 'Data Source', 'API Source'])
+  ).trim().toLowerCase();
+  const normalizedEventId = String(eventId || '').trim().toLowerCase();
+
+  if (explicitSource.includes('here') || normalizedEventId.includes('here')) {
+    return 'here';
+  }
+
+  if (
+    explicitSource.includes('511')
+    || explicitSource.includes('georgia')
+    || explicitSource.includes('gdot')
+    || fields['511 event ID']
+  ) {
+    return 'georgia-511';
+  }
+
+  return explicitSource.replace(/[^a-z0-9]+/g, '-') || 'airtable';
 }
 
 function normalizeDetectedTime(value) {
@@ -71,7 +117,11 @@ function normalizeRecord(record) {
   const subtypeMeta = SUBTYPE_DISPLAY[subtype];
   const gps = parseGpsCoordinates(fields['GPS Coordinates']);
   const detectedAt = normalizeDetectedTime(fields['detected time'] || fields['Detected Time']);
-  const eventId = fields['511 event ID'] || fields['Accident ID'] || record.id;
+  const eventId = readFirstField(fields, ['HERE event ID', 'Here event ID', 'Event ID', '511 event ID', 'Accident ID']) || record.id;
+  const source = identifySource(fields, eventId);
+  const incidentId = source === 'airtable'
+    ? `airtable:${record.id}`
+    : `${source}:${eventId}`;
 
   if (!eventId || !gps || !detectedAt || !subtypeMeta) {
     return {
@@ -83,7 +133,7 @@ function normalizeRecord(record) {
 
   return {
     incident: {
-      id: String(eventId),
+      id: String(incidentId),
       type: subtypeMeta.type,
       subtype,
       description: String(fields.Description || ''),
@@ -91,11 +141,12 @@ function normalizeRecord(record) {
       latitude: gps.latitude,
       longitude: gps.longitude,
       createdAt: detectedAt.toISOString(),
-      source: 'airtable',
+      source,
       status: 'Active',
       severity: subtypeMeta.severity,
       classification: subtypeMeta.classification,
       airtableRecordId: record.id,
+      providerEventId: String(eventId),
       accidentId: fields['Accident ID'] ? String(fields['Accident ID']) : '',
     },
     detectedAt,
