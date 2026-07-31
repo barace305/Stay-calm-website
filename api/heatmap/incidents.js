@@ -122,6 +122,14 @@ function normalizeDetectedTime(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function normalizeIncidentSeverity(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  const supported = new Set(['low', 'minor', 'major', 'critical']);
+
+  if (!supported.has(normalized)) return 'Low';
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
 function normalizeRecord(record) {
   const fields = record.fields || {};
   const subtype = normalizeSubtype(fields.Subtype);
@@ -154,7 +162,9 @@ function normalizeRecord(record) {
       createdAt: detectedAt.toISOString(),
       source,
       status: 'Active',
-      severity: subtypeMeta.severity,
+      severity: normalizeIncidentSeverity(
+        readFirstField(fields, ['Incident Severity', 'incident severity', 'Severity', 'severity'])
+      ),
       classification: subtypeMeta.classification,
       airtableRecordId: record.id,
       providerEventId: String(eventId),

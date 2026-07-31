@@ -29,12 +29,7 @@ import '../styles/heatmap.css';
 
 const MAP_CENTER = [33.785, -84.385];
 const MAP_ZOOM = 12;
-const MAP_MIN_ZOOM = 10;
 const MAP_MAX_ZOOM = 17;
-const MAP_BOUNDS = [
-  [33.55, -84.65],  // SW
-  [34.15, -84.05],  // NE
-];
 
 const REFRESH_INTERVAL = 60000;
 
@@ -88,6 +83,18 @@ function getLiveIncidentIconPath(type) {
 
 function incidentSvgMarkup(type, className = '') {
   return `<svg class="${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="${getLiveIncidentIconPath(type)}"></path></svg>`;
+}
+
+function getSeverityStyleClass(severity) {
+  switch (String(severity || '').toLowerCase()) {
+    case 'critical':
+    case 'major':
+      return 'high';
+    case 'minor':
+      return 'medium';
+    default:
+      return 'low';
+  }
 }
 
 function incidentListsMatch(previous, next) {
@@ -480,10 +487,8 @@ function MapDashboard({ onLogout, mode }) {
 
   const resetIdleTimer = useCallback(() => {
     lastInteractionRef.current = Date.now();
-    if (isIdle) {
-      setIsIdle(false);
-    }
-  }, [isIdle]);
+    setIsIdle(false);
+  }, []);
 
   // Reset idle timer on user action
   useEffect(() => {
@@ -622,7 +627,7 @@ function MapDashboard({ onLogout, mode }) {
       });
 
       activeList.forEach((incident) => {
-        const severityClass = incident.severity.toLowerCase();
+        const severityClass = getSeverityStyleClass(incident.severity);
         const typeClass = String(incident.subtype || 'incident').replace(/[^a-z0-9]+/g, '-');
         const safeType = escapeHtml(incident.type);
         const safeLocation = escapeHtml(incident.location);
@@ -946,10 +951,7 @@ function MapDashboard({ onLogout, mode }) {
     const map = L.map(mapContainerRef.current, {
       center: MAP_CENTER,
       zoom: MAP_ZOOM,
-      minZoom: MAP_MIN_ZOOM,
       maxZoom: MAP_MAX_ZOOM,
-      maxBounds: MAP_BOUNDS,
-      maxBoundsViscosity: 0.95,
       zoomControl: true,
       attributionControl: true,
       zoomSnap: 1,
@@ -957,7 +959,6 @@ function MapDashboard({ onLogout, mode }) {
       tap: true,
       touchZoom: true,
       dragging: true,
-      bounceAtZoomLimits: true,
       inertia: true,
     });
 
@@ -1174,13 +1175,16 @@ function MapDashboard({ onLogout, mode }) {
                 {feedStatus.error && (
                   <div className="live-refresh-warning">Refresh delayed. Showing recent cached incidents.</div>
                 )}
-                {activeIncidents.map((inc) => (
+                {activeIncidents.map((inc) => {
+                  const severityClass = isDemo ? inc.severity.toLowerCase() : getSeverityStyleClass(inc.severity);
+
+                  return (
                   <div
                     key={inc.id}
                     onClick={() => handleIncidentClick(inc)}
-                    className={`incident-row severity-${inc.severity.toLowerCase()} flex items-center gap-2 px-2 py-2 mb-0.5 rounded-lg`}
+                    className={`incident-row severity-${severityClass} flex items-center gap-2 px-2 py-2 mb-0.5 rounded-lg`}
                   >
-                    <div className={`incident-icon ${inc.severity.toLowerCase()} ${!isDemo ? 'live-incident-icon' : ''}`}>
+                    <div className={`incident-icon ${severityClass} ${!isDemo ? 'live-incident-icon' : ''}`}>
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={isDemo ? getIncidentIconPath(inc.type) : getLiveIncidentIconPath(inc.type)} />
                       </svg>
@@ -1190,11 +1194,12 @@ function MapDashboard({ onLogout, mode }) {
                       <p className="text-[#8AA3CC] text-[10px] truncate leading-tight mt-0.5">{inc.location}</p>
                     </div>
                     <div className="flex flex-col items-end gap-0.5 shrink-0 pl-1">
-                      <span className={`severity-badge ${inc.severity.toLowerCase()}`}>{inc.severity}</span>
+                      <span className={`severity-badge ${severityClass}`}>{inc.severity}</span>
                       <span className="text-[#5C7EB5] text-[8.5px] whitespace-nowrap mt-0.5">{formatRelativeTime(inc.createdAt)}</span>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </>
             )}
           </div>

@@ -898,7 +898,7 @@ export function generateDemoIncidents() {
 
 // Browser-safe live feed configuration. Airtable credentials must stay server-side.
 const DEFAULT_LIVE_INCIDENT_ENDPOINT = '/api/heatmap/incidents';
-const VALID_SEVERITIES = new Set(['Low', 'Medium', 'High']);
+const VALID_SEVERITIES = new Set(['Low', 'Minor', 'Major', 'Critical']);
 
 export const AIRTABLE_INCIDENT_FIELDS = [
   'Accident ID',
@@ -909,6 +909,7 @@ export const AIRTABLE_INCIDENT_FIELDS = [
   'detected time',
   'Detected Time',
   'Subtype',
+  'Incident Severity',
 ];
 
 const SUBTYPE_DISPLAY_TYPES = {
@@ -933,9 +934,9 @@ function readIncidentField(fields, names, fallback = '') {
 }
 
 function normalizeSeverity(value) {
-  const raw = String(value || 'Medium').trim().toLowerCase();
+  const raw = String(value || 'Low').trim().toLowerCase();
   const severity = raw.charAt(0).toUpperCase() + raw.slice(1);
-  return VALID_SEVERITIES.has(severity) ? severity : 'Medium';
+  return VALID_SEVERITIES.has(severity) ? severity : 'Low';
 }
 
 function normalizeLiveSubtype(value) {
@@ -1012,7 +1013,7 @@ function normalizeLiveIncident(record) {
     city: String(readIncidentField(fields, ['City', 'city'], 'Georgia')),
     latitude,
     longitude,
-    severity: normalizeSeverity(readIncidentField(fields, ['Severity', 'severity'], normalizedSubtype === 'crash' ? 'High' : 'Medium')),
+    severity: normalizeSeverity(readIncidentField(fields, ['Incident Severity', 'incident severity', 'Severity', 'severity'], 'Low')),
     createdAt: reportedDate.toISOString(),
     source: String(readIncidentField(fields, ['Source', 'source'], 'airtable')),
     status: String(readIncidentField(fields, ['Status', 'status'], 'Active')),
@@ -1064,10 +1065,12 @@ export function getActiveIncidents(incidents) {
 // Maps severity levels to heat layer intensity values for visual weighting.
 export function getSeverityIntensity(severity) {
   switch (severity) {
-    case 'High':
+    case 'Critical':
       return 1.0;
-    case 'Medium':
-      return 0.65;
+    case 'Major':
+      return 0.8;
+    case 'Minor':
+      return 0.55;
     case 'Low':
       return 0.35;
     default:
