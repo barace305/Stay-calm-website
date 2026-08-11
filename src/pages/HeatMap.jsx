@@ -122,6 +122,14 @@ export default function HeatMap({ mode = 'live' }) {
     () => sessionStorage.getItem(`sc_heatmap_${mode}_auth`) === 'true'
   );
 
+  useEffect(() => {
+    document.documentElement.classList.add('heatmap-active');
+
+    return () => {
+      document.documentElement.classList.remove('heatmap-active');
+    };
+  }, []);
+
   // Lock document body and viewport scrolling to prevent rubber-banding on iOS
   useEffect(() => {
     if (!authenticated) return;

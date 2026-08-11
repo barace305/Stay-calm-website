@@ -3,8 +3,10 @@
    Scoped styles for /heatmap. Does NOT affect any other pages.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Force clean screen locks and prevent page-level pinch/scroll issues on mobile */
-html, body, #root {
+/* Force clean screen locks only while a heat-map route is mounted. */
+html.heatmap-active,
+html.heatmap-active body,
+html.heatmap-active #root {
   margin: 0 !important;
   padding: 0 !important;
   overflow: hidden !important;
