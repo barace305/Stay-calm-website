@@ -1,4 +1,6 @@
-export default function Footer() {
+export default function Footer({ homePath = '' }) {
+  const sectionHref = (hash) => `${homePath}${hash}`
+
   return (
     <footer className="bg-navy-950 border-t border-navy-800/50">
       {/* CTA Banner */}
@@ -11,7 +13,7 @@ export default function Footer() {
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <a
-            href="#contact"
+            href={sectionHref('#contact')}
             className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950 font-semibold text-lg rounded-xl hover:from-gold-400 hover:to-gold-500 transition-all duration-300 shadow-lg shadow-gold-500/20 hover:shadow-gold-500/40 hover:-translate-y-0.5"
           >
             Get Help Today
@@ -67,7 +69,7 @@ export default function Footer() {
                   { label: 'Get Help', href: '#contact' },
                 ].map((link) => (
                   <li key={link.href}>
-                    <a href={link.href} className="text-navy-400 text-sm hover:text-gold-400 transition-colors duration-300">
+                    <a href={sectionHref(link.href)} className="text-navy-400 text-sm hover:text-gold-400 transition-colors duration-300">
                       {link.label}
                     </a>
                   </li>
@@ -125,12 +127,17 @@ export default function Footer() {
 
           {/* Copyright */}
           <div className="border-t border-navy-800/50 mt-10 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-navy-500 text-xs">
-              © {new Date().getFullYear()} StayCalm.Today — All rights reserved.
-            </p>
+            <div className="text-center sm:text-left">
+              <p className="text-navy-500 text-xs">
+                © {new Date().getFullYear()} StayCalm.Today — All rights reserved.
+              </p>
+              <p className="text-navy-500 text-xs mt-1">
+                Stay Calm is operated by Mine City LLC.
+              </p>
+            </div>
             <div className="flex items-center gap-6">
-              <a href="#" className="text-navy-500 text-xs hover:text-navy-300 transition-colors">Privacy Policy</a>
-              <a href="#" className="text-navy-500 text-xs hover:text-navy-300 transition-colors">Terms of Service</a>
+              <a href="/privacy" className="text-navy-500 text-xs hover:text-navy-300 transition-colors">Privacy Policy</a>
+              <a href="/terms" className="text-navy-500 text-xs hover:text-navy-300 transition-colors">Terms &amp; Conditions</a>
             </div>
           </div>
         </div>

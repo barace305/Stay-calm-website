@@ -6,6 +6,8 @@ import Towing from './pages/Towing';
 import BodyShop from './pages/BodyShop';
 import HeatMap from './pages/HeatMap';
 import Admin from './pages/Admin';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsConditions from './pages/TermsConditions';
 
 export default function App() {
   return (
@@ -20,6 +22,8 @@ export default function App() {
         <Route path="/heatmap" element={<HeatMap mode="live" />} />
         <Route path="/heatmap-demo" element={<HeatMap mode="demo" />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsConditions />} />
       </Routes>
     </Router>
   );

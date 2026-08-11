@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export default function Header() {
+export default function Header({ homePath = '' }) {
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -16,6 +16,7 @@ export default function Header() {
     { label: 'About', href: '#about' },
     { label: 'Contact', href: '#contact' },
   ]
+  const sectionHref = (hash) => `${homePath}${hash}`
 
   return (
     <header
@@ -28,7 +29,7 @@ export default function Header() {
     >
       <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
         {/* Logo */}
-        <a href="#" className="flex items-center gap-1 group shrink-0">
+        <a href={homePath || '#'} className="flex items-center gap-1 group shrink-0">
           <img
             src="/logo.png"
             alt="Stay Calm"
@@ -41,7 +42,7 @@ export default function Header() {
           {links.map((l) => (
             <a
               key={l.href}
-              href={l.href}
+              href={sectionHref(l.href)}
               className="text-sm font-medium text-navy-200 hover:text-gold-400 transition-colors duration-300 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-gold-400 after:transition-all after:duration-300 hover:after:w-full"
             >
               {l.label}
@@ -58,7 +59,7 @@ export default function Header() {
             Call Now
           </a>
           <a
-            href="#contact"
+            href={sectionHref('#contact')}
             className="px-5 py-2.5 bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950 text-sm font-semibold rounded-lg hover:from-gold-400 hover:to-gold-500 transition-all duration-300 shadow-lg shadow-gold-500/20 hover:shadow-gold-500/40 hover:-translate-y-0.5"
           >
             Get Help Today
@@ -104,7 +105,7 @@ export default function Header() {
           {links.map((l) => (
             <a
               key={l.href}
-              href={l.href}
+              href={sectionHref(l.href)}
               onClick={() => setMobileOpen(false)}
               className="block py-3 text-navy-200 hover:text-gold-400 transition-colors font-medium border-b border-navy-800/30 last:border-0"
             >
@@ -122,7 +123,7 @@ export default function Header() {
             Call (404) 990-1344
           </a>
           <a
-            href="#contact"
+            href={sectionHref('#contact')}
             onClick={() => setMobileOpen(false)}
             className="mt-3 block text-center px-5 py-3 bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950 font-semibold rounded-lg"
           >
