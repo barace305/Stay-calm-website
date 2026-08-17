@@ -20,7 +20,7 @@ export default function App() {
         <Route path="/body-shop" element={<BodyShop />} />
         <Route path="/bodyshop" element={<BodyShop />} />
         <Route path="/heatmap" element={<HeatMap mode="live" />} />
-        <Route path="/heatmap-demo" element={<HeatMap mode="demo" />} />
+        <Route path="/demo" element={<HeatMap mode="demo" />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsConditions />} />

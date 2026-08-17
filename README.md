@@ -62,7 +62,7 @@ stay-calm-website/
 
 ## Heat Map Routes
 
-- `/heatmap-demo` preserves the current sample-data partner heat map experience.
+- `/demo` preserves the current sample-data partner heat map experience.
 - `/heatmap` is the live partner heat map shell. It uses the same UI and map design, but it does not invent incidents or expose Airtable secrets.
 
 Set `VITE_HEATMAP_INCIDENTS_ENDPOINT` to a browser-safe JSON endpoint when the live feed is ready. That endpoint should be backed by Make.com, a serverless function, or another server-side bridge that owns the Airtable PAT. Do not put Airtable personal access tokens in `VITE_` variables.
