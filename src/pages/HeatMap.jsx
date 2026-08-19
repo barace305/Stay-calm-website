@@ -964,12 +964,22 @@ function MapDashboard({ onLogout, mode }) {
       maxZoom: MAP_MAX_ZOOM,
       zoomControl: true,
       attributionControl: true,
-      zoomSnap: 1,
-      zoomDelta: 1,
-      tap: true,
+      scrollWheelZoom: true,
+      wheelDebounceTime: 20,
+      wheelPxPerZoomLevel: 90,
+      zoomSnap: 0.5,
+      zoomDelta: 0.5,
+      zoomAnimation: true,
+      fadeAnimation: true,
+      markerZoomAnimation: true,
+      tap: false,
       touchZoom: true,
+      bounceAtZoomLimits: false,
       dragging: true,
       inertia: true,
+      inertiaDeceleration: 3400,
+      inertiaMaxSpeed: 700,
+      easeLinearity: 0.2,
     });
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -983,6 +993,8 @@ function MapDashboard({ onLogout, mode }) {
 
     let locationButton = null;
     let hasManualMapInteraction = false;
+    let locationRequestPending = false;
+    let forceCenterOnNextLocation = false;
 
     const setLocationButtonState = (state) => {
       if (!locationButton) return;
@@ -995,62 +1007,68 @@ function MapDashboard({ onLogout, mode }) {
         : 'Return to my area';
     };
 
-    const locateUser = ({ forceCenter = false, refresh = false } = {}) => {
-      if (userLocationRef.current && !refresh) {
-        map.setView(userLocationRef.current, USER_AREA_ZOOM, {
-          animate: true,
-          duration: 0.7,
-        });
-        setLocationButtonState('ready');
+    const centerOnUserArea = (coordinates) => {
+      map.stop();
+      map.setView(coordinates, USER_AREA_ZOOM, {
+        animate: true,
+        duration: 0.45,
+      });
+    };
+
+    const requestUserLocation = ({ centerOnSuccess = true, forceCenter = false, silent = false, fresh = false } = {}) => {
+      if (forceCenter) forceCenterOnNextLocation = true;
+
+      if (!navigator.geolocation || locationRequestPending) {
+        if (!navigator.geolocation && !silent) setLocationButtonState('unavailable');
         return;
       }
 
-      if (!navigator.geolocation) {
-        setLocationButtonState('unavailable');
-        return;
-      }
+      locationRequestPending = true;
+      if (!silent) setLocationButtonState('locating');
 
-      setLocationButtonState('locating');
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          locationRequestPending = false;
           if (disposed || mapInstanceRef.current !== map) return;
 
           const latitude = Number(position.coords.latitude);
           const longitude = Number(position.coords.longitude);
           if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-            setLocationButtonState('unavailable');
+            forceCenterOnNextLocation = false;
+            if (!silent) setLocationButtonState('unavailable');
             return;
           }
 
           userLocationRef.current = [latitude, longitude];
-          setLocationButtonState('ready');
+          if (!silent) setLocationButtonState('ready');
 
-          if (forceCenter || !hasManualMapInteraction) {
-            map.setView(userLocationRef.current, USER_AREA_ZOOM, {
-              animate: true,
-              duration: 0.7,
-            });
+          if (centerOnSuccess && (forceCenterOnNextLocation || !hasManualMapInteraction)) {
+            centerOnUserArea(userLocationRef.current);
           }
+          forceCenterOnNextLocation = false;
         },
         () => {
-          if (disposed) return;
-
-          if (forceCenter && userLocationRef.current) {
-            map.setView(userLocationRef.current, USER_AREA_ZOOM, {
-              animate: true,
-              duration: 0.7,
-            });
-            setLocationButtonState('ready');
-          } else {
-            setLocationButtonState('unavailable');
-          }
+          locationRequestPending = false;
+          forceCenterOnNextLocation = false;
+          if (!disposed && !silent) setLocationButtonState('unavailable');
         },
         {
           enableHighAccuracy: false,
-          timeout: 10000,
-          maximumAge: refresh ? 0 : 300000,
+          timeout: silent ? 6000 : 10000,
+          maximumAge: fresh ? 0 : 300000,
         }
       );
+    };
+
+    const goToMyArea = () => {
+      if (userLocationRef.current) {
+        centerOnUserArea(userLocationRef.current);
+        setLocationButtonState('ready');
+        requestUserLocation({ centerOnSuccess: false, silent: true, fresh: true });
+        return;
+      }
+
+      requestUserLocation({ centerOnSuccess: true, forceCenter: true });
     };
 
     const MyAreaControl = L.Control.extend({
@@ -1074,7 +1092,7 @@ function MapDashboard({ onLogout, mode }) {
         L.DomEvent.disableScrollPropagation(container);
         L.DomEvent.on(locationButton, 'click', (event) => {
           L.DomEvent.preventDefault(event);
-          locateUser({ forceCenter: true, refresh: true });
+          goToMyArea();
         });
 
         return container;
@@ -1092,11 +1110,10 @@ function MapDashboard({ onLogout, mode }) {
 
     // Bind map movement event listeners to trigger bounding-box spatial pruning
     const handleMapMovement = () => {
-      updateHeatLayer(map, activeIncidentsRef.current);
+      if (isDemo) updateHeatLayer(map, activeIncidentsRef.current);
     };
 
     map.on('moveend', handleMapMovement);
-    map.on('zoomend', handleMapMovement);
 
     // Also bind Leaflet map events to reset idle timer on pan/zoom
     const handleMapInteraction = () => {
@@ -1107,7 +1124,7 @@ function MapDashboard({ onLogout, mode }) {
     map.on('zoomstart', handleMapInteraction);
     map.on('click', handleMapInteraction);
 
-    locateUser();
+    requestUserLocation();
 
     const handleResize = () => {
       const mobile = window.innerWidth <= 640;
@@ -1124,7 +1141,6 @@ function MapDashboard({ onLogout, mode }) {
       disposed = true;
       window.removeEventListener('resize', handleResize);
       map.off('moveend', handleMapMovement);
-      map.off('zoomend', handleMapMovement);
       map.off('dragstart', handleMapInteraction);
       map.off('zoomstart', handleMapInteraction);
       map.off('click', handleMapInteraction);
@@ -1133,7 +1149,7 @@ function MapDashboard({ onLogout, mode }) {
       layerGroupRef.current = null;
       markerCacheRef.current = {};
     };
-  }, [refreshIncidents, updateHeatLayer, resetIdleTimer]);
+  }, [refreshIncidents, updateHeatLayer, resetIdleTimer, isDemo]);
 
   // Periodic Auto-refresh (paused when idle)
   useEffect(() => {
