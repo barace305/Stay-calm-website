@@ -30,6 +30,7 @@ import '../styles/heatmap.css';
 const MAP_CENTER = [33.785, -84.385];
 const MAP_ZOOM = 12;
 const MAP_MAX_ZOOM = 17;
+const USER_AREA_ZOOM = 12;
 
 const REFRESH_INTERVAL = 60000;
 
@@ -472,6 +473,7 @@ function MapDashboard({ onLogout, mode }) {
   const isDemo = mode === 'demo';
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
+  const userLocationRef = useRef(null);
   const layerGroupRef = useRef(null);
   const headerRef = useRef(null);
   const markerCacheRef = useRef({}); // maps inc.id -> { outer, inner, core, marker }
@@ -979,6 +981,109 @@ function MapDashboard({ onLogout, mode }) {
     map.zoomControl.setPosition('topright');
     mapInstanceRef.current = map;
 
+    let locationButton = null;
+    let hasManualMapInteraction = false;
+
+    const setLocationButtonState = (state) => {
+      if (!locationButton) return;
+
+      locationButton.classList.toggle('is-locating', state === 'locating');
+      locationButton.classList.toggle('is-unavailable', state === 'unavailable');
+      locationButton.setAttribute('aria-busy', state === 'locating' ? 'true' : 'false');
+      locationButton.title = state === 'unavailable'
+        ? 'Current location unavailable'
+        : 'Return to my area';
+    };
+
+    const locateUser = ({ forceCenter = false, refresh = false } = {}) => {
+      if (userLocationRef.current && !refresh) {
+        map.setView(userLocationRef.current, USER_AREA_ZOOM, {
+          animate: true,
+          duration: 0.7,
+        });
+        setLocationButtonState('ready');
+        return;
+      }
+
+      if (!navigator.geolocation) {
+        setLocationButtonState('unavailable');
+        return;
+      }
+
+      setLocationButtonState('locating');
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (disposed || mapInstanceRef.current !== map) return;
+
+          const latitude = Number(position.coords.latitude);
+          const longitude = Number(position.coords.longitude);
+          if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            setLocationButtonState('unavailable');
+            return;
+          }
+
+          userLocationRef.current = [latitude, longitude];
+          setLocationButtonState('ready');
+
+          if (forceCenter || !hasManualMapInteraction) {
+            map.setView(userLocationRef.current, USER_AREA_ZOOM, {
+              animate: true,
+              duration: 0.7,
+            });
+          }
+        },
+        () => {
+          if (disposed) return;
+
+          if (forceCenter && userLocationRef.current) {
+            map.setView(userLocationRef.current, USER_AREA_ZOOM, {
+              animate: true,
+              duration: 0.7,
+            });
+            setLocationButtonState('ready');
+          } else {
+            setLocationButtonState('unavailable');
+          }
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: refresh ? 0 : 300000,
+        }
+      );
+    };
+
+    const MyAreaControl = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd() {
+        const container = L.DomUtil.create('div', 'leaflet-control my-area-control');
+        locationButton = L.DomUtil.create('button', 'my-area-button', container);
+        locationButton.type = 'button';
+        locationButton.title = 'Return to my area';
+        locationButton.setAttribute('aria-label', 'Return map to my area');
+        locationButton.innerHTML = `
+          <svg class="my-area-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" stroke-width="1.8"></circle>
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke-linecap="round" stroke-width="1.8"></path>
+            <circle cx="12" cy="12" r="7" stroke-width="1.5"></circle>
+          </svg>
+          <span>My Area</span>
+        `;
+
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+        L.DomEvent.on(locationButton, 'click', (event) => {
+          L.DomEvent.preventDefault(event);
+          locateUser({ forceCenter: true, refresh: true });
+        });
+
+        return container;
+      },
+    });
+
+    const myAreaControl = new MyAreaControl();
+    myAreaControl.addTo(map);
+
     refreshIncidents().then((active) => {
       if (!disposed && mapInstanceRef.current === map && active) {
         updateHeatLayer(map, active);
@@ -995,11 +1100,14 @@ function MapDashboard({ onLogout, mode }) {
 
     // Also bind Leaflet map events to reset idle timer on pan/zoom
     const handleMapInteraction = () => {
+      hasManualMapInteraction = true;
       resetIdleTimer();
     };
     map.on('dragstart', handleMapInteraction);
     map.on('zoomstart', handleMapInteraction);
     map.on('click', handleMapInteraction);
+
+    locateUser();
 
     const handleResize = () => {
       const mobile = window.innerWidth <= 640;

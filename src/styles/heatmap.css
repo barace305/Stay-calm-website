@@ -55,6 +55,81 @@ html.heatmap-active #root {
   color: #EFC94B !important;
 }
 
+.heatmap-container .my-area-control {
+  clear: both;
+  margin-top: 8px !important;
+  margin-right: 12px !important;
+}
+
+.heatmap-container .my-area-button {
+  width: 72px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  border-radius: 8px;
+  background: rgba(6, 13, 24, 0.95);
+  color: #d4af37;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;
+}
+
+.heatmap-container .my-area-button:hover,
+.heatmap-container .my-area-button:focus-visible {
+  border-color: rgba(212, 175, 55, 0.55);
+  background: rgba(10, 22, 40, 0.98);
+  color: #efc94b;
+  outline: none;
+}
+
+.heatmap-container .my-area-button.is-locating {
+  color: #8aa3cc;
+  cursor: wait;
+}
+
+.heatmap-container .my-area-button.is-locating .my-area-icon {
+  animation: myAreaPulse 1s ease-in-out infinite;
+}
+
+.heatmap-container .my-area-button.is-unavailable {
+  color: #8aa3cc;
+  border-color: rgba(138, 163, 204, 0.25);
+}
+
+.my-area-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+@keyframes myAreaPulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  .heatmap-container .my-area-button {
+    width: 64px;
+    height: 26px;
+    padding: 0 6px;
+    gap: 4px;
+    font-size: 8px;
+  }
+
+  .my-area-icon {
+    width: 11px;
+    height: 11px;
+  }
+}
+
 /* Premium Semi-Dark Map tiles filter */
 .heatmap-container .leaflet-tile-pane {
   filter: brightness(0.68) contrast(1.25) saturate(0.95) !important;
