@@ -399,6 +399,28 @@ html.heatmap-active #root {
   z-index: 1000;
 }
 
+.heatmap-disclaimer {
+  position: relative;
+  z-index: 1000;
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  background: rgba(6, 13, 24, 0.98);
+  border-bottom: 1px solid rgba(212, 175, 55, 0.12);
+  color: #8aa3cc;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.2px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .heatmap-disclaimer {
+    padding: 4px 10px;
+    font-size: 8px;
+  }
+}
+
 /* ─── FLOATING SIDE PANEL / DOCK SHEET (Glassmorphism & Transparency) ───── */
 .heatmap-side-panel {
   position: absolute;

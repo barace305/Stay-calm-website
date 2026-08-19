@@ -1107,6 +1107,10 @@ function MapDashboard({ onLogout, mode }) {
       </div>
 
       {/* ─── MAP & PANEL CONTAINER (Flex-1 below header) ───────────── */}
+      <div className="heatmap-disclaimer" role="note">
+        For informational purposes only. Incident information does not constitute a Stay Calm dispatch.
+      </div>
+
       <div className="relative flex-1 w-full overflow-hidden">
         {/* Map */}
         <div ref={mapContainerRef} className="absolute inset-0 z-0" style={{ width: '100%', height: '100%' }} />
