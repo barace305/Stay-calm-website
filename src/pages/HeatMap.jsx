@@ -1108,9 +1108,16 @@ function MapDashboard({ onLogout, mode }) {
       }
     });
 
+    let movementUpdateTimer = null;
+
     // Bind map movement event listeners to trigger bounding-box spatial pruning
     const handleMapMovement = () => {
-      if (isDemo) updateHeatLayer(map, activeIncidentsRef.current);
+      if (!isDemo) return;
+      if (movementUpdateTimer) clearTimeout(movementUpdateTimer);
+      movementUpdateTimer = setTimeout(() => {
+        updateHeatLayer(map, activeIncidentsRef.current);
+        movementUpdateTimer = null;
+      }, 90);
     };
 
     map.on('moveend', handleMapMovement);
@@ -1123,6 +1130,40 @@ function MapDashboard({ onLogout, mode }) {
     map.on('dragstart', handleMapInteraction);
     map.on('zoomstart', handleMapInteraction);
     map.on('click', handleMapInteraction);
+
+    let trackpadPanFrame = null;
+    let pendingTrackpadX = 0;
+    let pendingTrackpadY = 0;
+    const handleTrackpadWheel = (event) => {
+      const horizontalSwipe = Math.abs(event.deltaX) > 0;
+      const smoothVerticalSwipe = Math.abs(event.deltaY) > 0 && Math.abs(event.deltaY) < 50;
+      const isTrackpadSwipe = event.deltaMode === 0 && (horizontalSwipe || smoothVerticalSwipe);
+
+      if (window.innerWidth <= 640 || event.ctrlKey || !isTrackpadSwipe) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      hasManualMapInteraction = true;
+      resetIdleTimer();
+      pendingTrackpadX += event.deltaX;
+      pendingTrackpadY += event.deltaY;
+
+      if (trackpadPanFrame) return;
+      trackpadPanFrame = window.requestAnimationFrame(() => {
+        map.panBy([pendingTrackpadX, pendingTrackpadY], {
+          animate: false,
+          noMoveStart: true,
+        });
+        pendingTrackpadX = 0;
+        pendingTrackpadY = 0;
+        trackpadPanFrame = null;
+      });
+    };
+
+    map.getContainer().addEventListener('wheel', handleTrackpadWheel, {
+      passive: false,
+      capture: true,
+    });
 
     requestUserLocation();
 
@@ -1140,6 +1181,9 @@ function MapDashboard({ onLogout, mode }) {
     return () => {
       disposed = true;
       window.removeEventListener('resize', handleResize);
+      map.getContainer().removeEventListener('wheel', handleTrackpadWheel, { capture: true });
+      if (trackpadPanFrame) window.cancelAnimationFrame(trackpadPanFrame);
+      if (movementUpdateTimer) clearTimeout(movementUpdateTimer);
       map.off('moveend', handleMapMovement);
       map.off('dragstart', handleMapInteraction);
       map.off('zoomstart', handleMapInteraction);
